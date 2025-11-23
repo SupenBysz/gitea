@@ -143,7 +143,14 @@ func EditWikiPage(ctx *context.APIContext) {
 	if form.Title == "" {
 		newWikiName = oldWikiName
 	} else {
-		newWikiName = wiki_service.UserTitleToWebPath("", form.Title)
+		// Check if the new title is the same as the current title to avoid unnecessary conversion
+		_, currentTitle := wiki_service.WebPathToUserTitle(oldWikiName)
+		if strings.TrimSpace(form.Title) == currentTitle {
+			// Title unchanged, keep the original WebPath to avoid encoding inconsistencies
+			newWikiName = oldWikiName
+		} else {
+			newWikiName = wiki_service.UserTitleToWebPath("", form.Title)
+		}
 	}
 
 	if len(form.Message) == 0 {
@@ -448,11 +455,8 @@ func ListPageRevisions(ctx *context.APIContext) {
 		return
 	}
 
-	// Convert commits to API format
-	result := make([]*api.WikiCommit, len(commitsHistory))
-	for i := range commitsHistory {
-		result[i] = convert.ToWikiCommit(commitsHistory[i])
-	}
+	// Convert commits to API format and wrap in WikiCommitList
+	result := convert.ToWikiCommitList(commitsHistory, commitsCount)
 
 	ctx.SetTotalCountHeader(commitsCount)
 	ctx.JSON(http.StatusOK, result)
@@ -519,8 +523,18 @@ func wikiContentsByEntry(ctx *context.APIContext, entry *git.TreeEntry) string {
 // wikiContentsByName returns the contents of a wiki page, along with a boolean
 // indicating whether the page exists. Writes to ctx if an error occurs.
 func wikiContentsByName(ctx *context.APIContext, commit *git.Commit, wikiName wiki_service.WebPath, isSidebarOrFooter bool) (string, string) {
-	gitFilename := wiki_service.WebPathToGitPath(wikiName)
-	entry, err := findEntryForFile(commit, gitFilename)
+	// Try both unescaped and escaped versions of the filename for compatibility
+	unescaped := string(wikiName) + ".md"
+	gitPath := wiki_service.WebPathToGitPath(wikiName)
+
+	// First try the unescaped version
+	entry, err := findEntryForFile(commit, unescaped)
+	if err == nil && entry != nil {
+		return wikiContentsByEntry(ctx, entry), unescaped
+	}
+
+	// If not found, try the escaped gitPath version
+	entry, err = findEntryForFile(commit, gitPath)
 	if err != nil {
 		if git.IsErrNotExist(err) {
 			if !isSidebarOrFooter {
@@ -531,5 +545,5 @@ func wikiContentsByName(ctx *context.APIContext, commit *git.Commit, wikiName wi
 		}
 		return "", ""
 	}
-	return wikiContentsByEntry(ctx, entry), gitFilename
+	return wikiContentsByEntry(ctx, entry), gitPath
 }
