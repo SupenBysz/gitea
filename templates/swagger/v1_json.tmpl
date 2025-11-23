@@ -27782,6 +27782,105 @@
       },
       "x-go-package": "code.gitea.io/gitea/modules/structs"
     },
+    "CreateProjectColumnOption": {
+      "description": "CreateProjectColumnOption represents options for creating a project column",
+      "type": "object",
+      "required": ["title"],
+      "properties": {
+        "color": {
+          "description": "Column color (hex format, e.g., #FF0000)",
+          "type": "string",
+          "x-go-name": "Color"
+        },
+        "title": {
+          "description": "Column title",
+          "type": "string",
+          "x-go-name": "Title"
+        }
+      },
+      "x-go-package": "code.gitea.io/gitea/modules/structs"
+    },
+    "CreateProjectOption": {
+      "description": "CreateProjectOption represents options for creating a project",
+      "type": "object",
+      "required": ["title"],
+      "properties": {
+        "card_type": {
+          "description": "Card type: 0=text_only, 1=images_and_text",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CardType"
+        },
+        "description": {
+          "description": "Project description",
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "template_type": {
+          "description": "Template type: 0=none, 1=basic_kanban, 2=bug_triage",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "TemplateType"
+        },
+        "title": {
+          "description": "Project title",
+          "type": "string",
+          "x-go-name": "Title"
+        }
+      },
+      "x-go-package": "code.gitea.io/gitea/modules/structs"
+    },
+    "EditProjectColumnOption": {
+      "description": "EditProjectColumnOption represents options for editing a project column",
+      "type": "object",
+      "properties": {
+        "color": {
+          "description": "Column color (hex format)",
+          "type": "string",
+          "x-go-name": "Color"
+        },
+        "sorting": {
+          "description": "Sorting order",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Sorting"
+        },
+        "title": {
+          "description": "Column title",
+          "type": "string",
+          "x-go-name": "Title"
+        }
+      },
+      "x-go-package": "code.gitea.io/gitea/modules/structs"
+    },
+    "EditProjectOption": {
+      "description": "EditProjectOption represents options for editing a project",
+      "type": "object",
+      "properties": {
+        "card_type": {
+          "description": "Card type: 0=text_only, 1=images_and_text",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CardType"
+        },
+        "description": {
+          "description": "Project description",
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "is_closed": {
+          "description": "Whether the project is closed",
+          "type": "boolean",
+          "x-go-name": "IsClosed"
+        },
+        "title": {
+          "description": "Project title",
+          "type": "string",
+          "x-go-name": "Title"
+        }
+      },
+      "x-go-package": "code.gitea.io/gitea/modules/structs"
+    },
     "PublicKey": {
       "description": "PublicKey publickey is a user key to push code to repository",
       "type": "object",
