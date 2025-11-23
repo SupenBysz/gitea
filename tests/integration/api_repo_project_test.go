@@ -507,7 +507,10 @@ func TestAPIAddIssueToProjectColumn(t *testing.T) {
 	MakeRequest(t, req, http.StatusCreated)
 
 	// Verify issue is in the column
-	projectIssue := unittest.AssertExistsAndLoadBean(t, &project_model.ProjectIssue{IssueID: issue.ID})
+	projectIssue := unittest.AssertExistsAndLoadBean(t, &project_model.ProjectIssue{
+		ProjectID: project.ID,
+		IssueID:   issue.ID,
+	})
 	assert.Equal(t, column1.ID, projectIssue.ProjectColumnID)
 
 	// Test moving issue to another column
@@ -517,7 +520,10 @@ func TestAPIAddIssueToProjectColumn(t *testing.T) {
 	MakeRequest(t, req, http.StatusCreated)
 
 	// Verify issue moved to new column
-	projectIssue = unittest.AssertExistsAndLoadBean(t, &project_model.ProjectIssue{IssueID: issue.ID})
+	projectIssue = unittest.AssertExistsAndLoadBean(t, &project_model.ProjectIssue{
+		ProjectID: project.ID,
+		IssueID:   issue.ID,
+	})
 	assert.Equal(t, column2.ID, projectIssue.ProjectColumnID)
 
 	// Test adding same issue to same column (should be idempotent)
@@ -544,7 +550,7 @@ func TestAPIProjectPermissions(t *testing.T) {
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
-	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user2"})
+	nonCollaborator := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user1"})
 
 	// Create a test project
 	project := &project_model.Project{
@@ -561,7 +567,7 @@ func TestAPIProjectPermissions(t *testing.T) {
 	}()
 
 	ownerToken := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteIssue)
-	user2Token := getUserToken(t, user2.Name, auth_model.AccessTokenScopeWriteIssue)
+	nonCollaboratorToken := getUserToken(t, nonCollaborator.Name, auth_model.AccessTokenScopeWriteIssue)
 
 	// Owner should be able to read
 	req := NewRequestf(t, "GET", "/api/v1/repos/%s/%s/projects/%d", owner.Name, repo.Name, project.ID).
@@ -575,15 +581,15 @@ func TestAPIProjectPermissions(t *testing.T) {
 	}).AddTokenAuth(ownerToken)
 	MakeRequest(t, req, http.StatusOK)
 
-	// User2 (non-collaborator) should not be able to update
-	anotherTitle := "Updated by User2"
+	// Non-collaborator should not be able to update
+	anotherTitle := "Updated by Non-collaborator"
 	req = NewRequestWithJSON(t, "PATCH", fmt.Sprintf("/api/v1/repos/%s/%s/projects/%d", owner.Name, repo.Name, project.ID), &api.EditProjectOption{
 		Title: &anotherTitle,
-	}).AddTokenAuth(user2Token)
+	}).AddTokenAuth(nonCollaboratorToken)
 	MakeRequest(t, req, http.StatusForbidden)
 
-	// User2 should not be able to delete
+	// Non-collaborator should not be able to delete
 	req = NewRequestf(t, "DELETE", "/api/v1/repos/%s/%s/projects/%d", owner.Name, repo.Name, project.ID).
-		AddTokenAuth(user2Token)
+		AddTokenAuth(nonCollaboratorToken)
 	MakeRequest(t, req, http.StatusForbidden)
 }
