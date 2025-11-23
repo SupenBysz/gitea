@@ -35,7 +35,6 @@ func TestAPIListProjects(t *testing.T) {
 
 	var projects []*api.Project
 	DecodeJSON(t, resp, &projects)
-	assert.GreaterOrEqual(t, len(projects), 0)
 
 	// Test state filter - open
 	req = NewRequestf(t, "GET", "/api/v1/repos/%s/%s/projects?state=open", owner.Name, repo.Name).
@@ -51,7 +50,6 @@ func TestAPIListProjects(t *testing.T) {
 		AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusOK)
 	DecodeJSON(t, resp, &projects)
-	assert.GreaterOrEqual(t, len(projects), 0)
 
 	// Test pagination
 	req = NewRequestf(t, "GET", "/api/v1/repos/%s/%s/projects?page=1&limit=5", owner.Name, repo.Name).
@@ -90,7 +88,7 @@ func TestAPIGetProject(t *testing.T) {
 	DecodeJSON(t, resp, &apiProject)
 	assert.Equal(t, project.Title, apiProject.Title)
 	assert.Equal(t, project.ID, apiProject.ID)
-	assert.Equal(t, repo.ID, int64(apiProject.RepoID))
+	assert.Equal(t, repo.ID, apiProject.RepoID)
 	assert.NotEmpty(t, apiProject.URL)
 
 	// Test getting non-existent project
