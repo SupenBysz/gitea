@@ -22083,6 +22083,22 @@
       },
       "x-go-package": "code.gitea.io/gitea/modules/structs"
     },
+    "AddIssueToProjectColumnOption": {
+      "description": "AddIssueToProjectColumnOption represents options for adding an issue to a project column",
+      "type": "object",
+      "required": [
+        "issue_id"
+      ],
+      "properties": {
+        "issue_id": {
+          "description": "Issue ID to add to the column",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "IssueID"
+        }
+      },
+      "x-go-package": "code.gitea.io/gitea/modules/structs"
+    },
     "AddTimeOption": {
       "description": "AddTimeOption options for adding time to an issue",
       "type": "object",
@@ -23816,6 +23832,56 @@
       },
       "x-go-package": "code.gitea.io/gitea/modules/structs"
     },
+    "CreateProjectColumnOption": {
+      "description": "CreateProjectColumnOption represents options for creating a project column",
+      "type": "object",
+      "required": [
+        "title"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "x-go-name": "Title"
+        },
+        "color": {
+          "description": "Column color (hex format, e.g., #FF0000)",
+          "type": "string",
+          "x-go-name": "Color"
+        }
+      },
+      "x-go-package": "code.gitea.io/gitea/modules/structs"
+    },
+    "CreateProjectOption": {
+      "description": "CreateProjectOption represents options for creating a project",
+      "type": "object",
+      "required": [
+        "title"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "x-go-name": "Title"
+        },
+        "description": {
+          "description": "Project description",
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "template_type": {
+          "description": "Template type: 0=none, 1=basic_kanban, 2=bug_triage",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "TemplateType"
+        },
+        "card_type": {
+          "description": "Card type: 0=text_only, 1=images_and_text",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CardType"
+        }
+      },
+      "x-go-package": "code.gitea.io/gitea/modules/structs"
+    },
     "CreatePullRequestOption": {
       "description": "CreatePullRequestOption options when creating a pull request",
       "type": "object",
@@ -24927,6 +24993,57 @@
           "description": "The website URL of the organization",
           "type": "string",
           "x-go-name": "Website"
+        }
+      },
+      "x-go-package": "code.gitea.io/gitea/modules/structs"
+    },
+    "EditProjectColumnOption": {
+      "description": "EditProjectColumnOption represents options for editing a project column",
+      "type": "object",
+      "properties": {
+        "title": {
+          "description": "Column title",
+          "type": "string",
+          "x-go-name": "Title"
+        },
+        "color": {
+          "description": "Column color (hex format)",
+          "type": "string",
+          "x-go-name": "Color"
+        },
+        "sorting": {
+          "description": "Sorting order",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Sorting"
+        }
+      },
+      "x-go-package": "code.gitea.io/gitea/modules/structs"
+    },
+    "EditProjectOption": {
+      "description": "EditProjectOption represents options for editing a project",
+      "type": "object",
+      "properties": {
+        "title": {
+          "description": "Project title",
+          "type": "string",
+          "x-go-name": "Title"
+        },
+        "description": {
+          "description": "Project description",
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "card_type": {
+          "description": "Card type: 0=text_only, 1=images_and_text",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CardType"
+        },
+        "is_closed": {
+          "description": "Whether the project is closed",
+          "type": "boolean",
+          "x-go-name": "IsClosed"
         }
       },
       "x-go-package": "code.gitea.io/gitea/modules/structs"
@@ -27782,107 +27899,6 @@
       },
       "x-go-package": "code.gitea.io/gitea/modules/structs"
     },
-    "CreateProjectColumnOption": {
-      "description": "CreateProjectColumnOption represents options for creating a project column",
-      "type": "object",
-      "required": [
-        "title"
-      ],
-      "properties": {
-        "title": {
-          "type": "string",
-          "x-go-name": "Title"
-        },
-        "color": {
-          "description": "Column color (hex format, e.g., #FF0000)",
-          "type": "string",
-          "x-go-name": "Color"
-        }
-      },
-      "x-go-package": "code.gitea.io/gitea/modules/structs"
-    },
-    "CreateProjectOption": {
-      "description": "CreateProjectOption represents options for creating a project",
-      "type": "object",
-      "required": [
-        "title"
-      ],
-      "properties": {
-        "title": {
-          "type": "string",
-          "x-go-name": "Title"
-        },
-        "description": {
-          "description": "Project description",
-          "type": "string",
-          "x-go-name": "Description"
-        },
-        "template_type": {
-          "description": "Template type: 0=none, 1=basic_kanban, 2=bug_triage",
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "TemplateType"
-        },
-        "card_type": {
-          "description": "Card type: 0=text_only, 1=images_and_text",
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "CardType"
-        }
-      },
-      "x-go-package": "code.gitea.io/gitea/modules/structs"
-    },
-    "EditProjectColumnOption": {
-      "description": "EditProjectColumnOption represents options for editing a project column",
-      "type": "object",
-      "properties": {
-        "title": {
-          "description": "Column title",
-          "type": "string",
-          "x-go-name": "Title"
-        },
-        "color": {
-          "description": "Column color (hex format)",
-          "type": "string",
-          "x-go-name": "Color"
-        },
-        "sorting": {
-          "description": "Sorting order",
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "Sorting"
-        }
-      },
-      "x-go-package": "code.gitea.io/gitea/modules/structs"
-    },
-    "EditProjectOption": {
-      "description": "EditProjectOption represents options for editing a project",
-      "type": "object",
-      "properties": {
-        "title": {
-          "description": "Project title",
-          "type": "string",
-          "x-go-name": "Title"
-        },
-        "description": {
-          "description": "Project description",
-          "type": "string",
-          "x-go-name": "Description"
-        },
-        "card_type": {
-          "description": "Card type: 0=text_only, 1=images_and_text",
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "CardType"
-        },
-        "is_closed": {
-          "description": "Whether the project is closed",
-          "type": "boolean",
-          "x-go-name": "IsClosed"
-        }
-      },
-      "x-go-package": "code.gitea.io/gitea/modules/structs"
-    },
     "PublicKey": {
       "description": "PublicKey publickey is a user key to push code to repository",
       "type": "object",
@@ -29980,22 +29996,6 @@
           "description": "The title of the wiki page",
           "type": "string",
           "x-go-name": "Title"
-        }
-      },
-      "x-go-package": "code.gitea.io/gitea/modules/structs"
-    },
-    "AddIssueToProjectColumnOption": {
-      "description": "AddIssueToProjectColumnOption represents options for adding an issue to a project column",
-      "type": "object",
-      "required": [
-        "issue_id"
-      ],
-      "properties": {
-        "issue_id": {
-          "description": "Issue ID to add to the column",
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "IssueID"
         }
       },
       "x-go-package": "code.gitea.io/gitea/modules/structs"
