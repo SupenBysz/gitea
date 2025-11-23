@@ -137,10 +137,13 @@ func EditWikiPage(ctx *context.APIContext) {
 	form := web.GetForm(ctx).(*api.CreateWikiPageOptions)
 
 	oldWikiName := wiki_service.WebPathFromRequest(ctx.PathParamRaw("pageName"))
-	newWikiName := wiki_service.UserTitleToWebPath("", form.Title)
 
-	if len(newWikiName) == 0 {
+	// If no new title is provided, keep the original page name
+	var newWikiName wiki_service.WebPath
+	if form.Title == "" {
 		newWikiName = oldWikiName
+	} else {
+		newWikiName = wiki_service.UserTitleToWebPath("", form.Title)
 	}
 
 	if len(form.Message) == 0 {
@@ -445,8 +448,14 @@ func ListPageRevisions(ctx *context.APIContext) {
 		return
 	}
 
+	// Convert commits to API format
+	result := make([]*api.WikiCommit, len(commitsHistory))
+	for i := range commitsHistory {
+		result[i] = convert.ToWikiCommit(commitsHistory[i])
+	}
+
 	ctx.SetTotalCountHeader(commitsCount)
-	ctx.JSON(http.StatusOK, convert.ToWikiCommitList(commitsHistory, commitsCount))
+	ctx.JSON(http.StatusOK, result)
 }
 
 // findEntryForFile finds the tree entry for a target filepath.
