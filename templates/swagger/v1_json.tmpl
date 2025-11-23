@@ -1512,7 +1512,7 @@
               "type": "string"
             },
             "collectionFormat": "multi",
-            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread \u0026 pinned.",
+            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread & pinned.",
             "name": "status-types",
             "in": "query"
           },
@@ -7963,7 +7963,7 @@
         }
       },
       "post": {
-        "description": "Uses automatic pagination based on default page size and max response size and returns the maximum allowed number of files. Files which could not be retrieved are null. Files which are too large are being returned with `encoding == null`, `content == null` and `size \u003e 0`, they can be requested separately by using the `download_url`.",
+        "description": "Uses automatic pagination based on default page size and max response size and returns the maximum allowed number of files. Files which could not be retrieved are null. Files which are too large are being returned with `encoding == null`, `content == null` and `size > 0`, they can be requested separately by using the `download_url`.",
         "produces": [
           "application/json"
         ],
@@ -13303,7 +13303,7 @@
               "type": "string"
             },
             "collectionFormat": "multi",
-            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread \u0026 pinned",
+            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread & pinned",
             "name": "status-types",
             "in": "query"
           },
@@ -23849,7 +23849,7 @@
           "x-go-name": "Deadline"
         },
         "head": {
-          "description": "The head branch for the pull request, it could be a branch name on the base repository or\na form like `\u003cusername\u003e:\u003cbranch\u003e` which refers to the user's fork repository's branch.",
+          "description": "The head branch for the pull request, it could be a branch name on the base repository or\na form like `<username>:<branch>` which refers to the user's fork repository's branch.",
           "type": "string",
           "x-go-name": "Head"
         },
@@ -27785,17 +27785,18 @@
     "CreateProjectColumnOption": {
       "description": "CreateProjectColumnOption represents options for creating a project column",
       "type": "object",
-      "required": ["title"],
+      "required": [
+        "title"
+      ],
       "properties": {
+        "title": {
+          "type": "string",
+          "x-go-name": "Title"
+        },
         "color": {
           "description": "Column color (hex format, e.g., #FF0000)",
           "type": "string",
           "x-go-name": "Color"
-        },
-        "title": {
-          "description": "Column title",
-          "type": "string",
-          "x-go-name": "Title"
         }
       },
       "x-go-package": "code.gitea.io/gitea/modules/structs"
@@ -27803,13 +27804,13 @@
     "CreateProjectOption": {
       "description": "CreateProjectOption represents options for creating a project",
       "type": "object",
-      "required": ["title"],
+      "required": [
+        "title"
+      ],
       "properties": {
-        "card_type": {
-          "description": "Card type: 0=text_only, 1=images_and_text",
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "CardType"
+        "title": {
+          "type": "string",
+          "x-go-name": "Title"
         },
         "description": {
           "description": "Project description",
@@ -27822,10 +27823,11 @@
           "format": "int64",
           "x-go-name": "TemplateType"
         },
-        "title": {
-          "description": "Project title",
-          "type": "string",
-          "x-go-name": "Title"
+        "card_type": {
+          "description": "Card type: 0=text_only, 1=images_and_text",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CardType"
         }
       },
       "x-go-package": "code.gitea.io/gitea/modules/structs"
@@ -27834,6 +27836,11 @@
       "description": "EditProjectColumnOption represents options for editing a project column",
       "type": "object",
       "properties": {
+        "title": {
+          "description": "Column title",
+          "type": "string",
+          "x-go-name": "Title"
+        },
         "color": {
           "description": "Column color (hex format)",
           "type": "string",
@@ -27844,11 +27851,6 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "Sorting"
-        },
-        "title": {
-          "description": "Column title",
-          "type": "string",
-          "x-go-name": "Title"
         }
       },
       "x-go-package": "code.gitea.io/gitea/modules/structs"
@@ -27857,26 +27859,26 @@
       "description": "EditProjectOption represents options for editing a project",
       "type": "object",
       "properties": {
-        "card_type": {
-          "description": "Card type: 0=text_only, 1=images_and_text",
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "CardType"
+        "title": {
+          "description": "Project title",
+          "type": "string",
+          "x-go-name": "Title"
         },
         "description": {
           "description": "Project description",
           "type": "string",
           "x-go-name": "Description"
         },
+        "card_type": {
+          "description": "Card type: 0=text_only, 1=images_and_text",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CardType"
+        },
         "is_closed": {
           "description": "Whether the project is closed",
           "type": "boolean",
           "x-go-name": "IsClosed"
-        },
-        "title": {
-          "description": "Project title",
-          "type": "string",
-          "x-go-name": "Title"
         }
       },
       "x-go-package": "code.gitea.io/gitea/modules/structs"
@@ -29981,6 +29983,22 @@
         }
       },
       "x-go-package": "code.gitea.io/gitea/modules/structs"
+    },
+    "AddIssueToProjectColumnOption": {
+      "description": "AddIssueToProjectColumnOption represents options for adding an issue to a project column",
+      "type": "object",
+      "required": [
+        "issue_id"
+      ],
+      "properties": {
+        "issue_id": {
+          "description": "Issue ID to add to the column",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "IssueID"
+        }
+      },
+      "x-go-package": "code.gitea.io/gitea/modules/structs"
     }
   },
   "responses": {
@@ -31116,7 +31134,7 @@
     "parameterBodies": {
       "description": "parameterBodies",
       "schema": {
-        "$ref": "#/definitions/LockIssueOption"
+        "$ref": "#/definitions/AddIssueToProjectColumnOption"
       }
     },
     "redirect": {
