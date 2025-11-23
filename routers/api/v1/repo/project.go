@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"code.gitea.io/gitea/models/db"
+	issues_model "code.gitea.io/gitea/models/issues"
 	project_model "code.gitea.io/gitea/models/project"
 	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/optional"
@@ -342,12 +343,19 @@ func DeleteProject(ctx *context.APIContext) {
 		return
 	}
 
-	if err := project_model.DeleteProjectByID(ctx, ctx.PathParamInt64("id")); err != nil {
+	// Verify project exists and belongs to this repository
+	project, err := project_model.GetProjectForRepoByID(ctx, ctx.Repo.Repository.ID, ctx.PathParamInt64("id"))
+	if err != nil {
 		if project_model.IsErrProjectNotExist(err) {
 			ctx.APIErrorNotFound()
 		} else {
 			ctx.APIErrorInternal(err)
 		}
+		return
+	}
+
+	if err := project_model.DeleteProjectByID(ctx, project.ID); err != nil {
+		ctx.APIErrorInternal(err)
 		return
 	}
 
@@ -378,6 +386,14 @@ func ListProjectColumns(ctx *context.APIContext) {
 	//   type: integer
 	//   format: int64
 	//   required: true
+	// - name: page
+	//   in: query
+	//   description: page number of results
+	//   type: integer
+	// - name: limit
+	//   in: query
+	//   description: page size of results
+	//   type: integer
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/ProjectColumnList"
@@ -399,12 +415,42 @@ func ListProjectColumns(ctx *context.APIContext) {
 		return
 	}
 
-	columns, err := project.GetColumns(ctx)
+	// Get all columns
+	allColumns, err := project.GetColumns(ctx)
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
 	}
 
+	totalCount := int64(len(allColumns))
+
+	// Parse pagination parameters
+	page := ctx.FormInt("page")
+	if page <= 0 {
+		page = 1
+	}
+
+	limit := ctx.FormInt("limit")
+	if limit <= 0 {
+		limit = setting.UI.IssuePagingNum
+	}
+
+	// Apply pagination
+	start := (page - 1) * limit
+	end := start + limit
+
+	var columns project_model.ColumnList
+	if start < len(allColumns) {
+		if end > len(allColumns) {
+			end = len(allColumns)
+		}
+		columns = allColumns[start:end]
+	} else {
+		columns = make([]*project_model.Column, 0)
+	}
+
+	ctx.SetLinkHeader(int(totalCount), limit)
+	ctx.SetTotalCountHeader(totalCount)
 	ctx.JSON(http.StatusOK, convert.ToProjectColumnList(ctx, columns))
 }
 
@@ -699,6 +745,22 @@ func AddIssueToProjectColumn(ctx *context.APIContext) {
 
 	// Parse request body
 	form := web.GetForm(ctx).(*api.AddIssueToProjectColumnOption)
+
+	// Verify issue exists and belongs to this repository
+	issue, err := issues_model.GetIssueByID(ctx, form.IssueID)
+	if err != nil {
+		if issues_model.IsErrIssueNotExist(err) {
+			ctx.APIError(http.StatusUnprocessableEntity, "issue not found")
+		} else {
+			ctx.APIErrorInternal(err)
+		}
+		return
+	}
+
+	if issue.RepoID != ctx.Repo.Repository.ID {
+		ctx.APIError(http.StatusUnprocessableEntity, "issue does not belong to this repository")
+		return
+	}
 
 	// Add issue to column
 	if err := project_model.AddIssueToColumn(ctx, form.IssueID, column); err != nil {
