@@ -1468,10 +1468,34 @@ func Routes() *web.Router {
 					m.Post("", bind(api.UpdateRepoAvatarOption{}), repo.UpdateAvatar)
 					m.Delete("", repo.DeleteAvatar)
 				}, reqAdmin(), reqToken())
-
 				m.Methods("HEAD,GET", "/{ball_type:tarball|zipball|bundle}/*", reqRepoReader(unit.TypeCode), context.ReferencesGitRepo(true), repo.DownloadArchive)
 			}, repoAssignment(), checkTokenPublicOnly())
 		}, tokenRequiresScopes(auth_model.AccessTokenScopeCategoryRepository))
+
+		// Project Boards (requires issue scope)
+		m.Group("/repos", func() {
+			m.Group("/{username}/{reponame}", func() {
+				m.Group("/projects", func() {
+					m.Combo("").
+						Get(repo.ListProjects).
+						Post(reqToken(), reqRepoWriter(unit.TypeProjects), mustNotBeArchived, bind(api.CreateProjectOption{}), repo.CreateProject)
+					m.Group("/{id}", func() {
+						m.Combo("").
+							Get(repo.GetProject).
+							Patch(reqToken(), reqRepoWriter(unit.TypeProjects), bind(api.EditProjectOption{}), repo.EditProject).
+							Delete(reqToken(), reqRepoWriter(unit.TypeProjects), repo.DeleteProject)
+						m.Combo("/columns").
+							Get(repo.ListProjectColumns).
+							Post(reqToken(), reqRepoWriter(unit.TypeProjects), mustNotBeArchived, bind(api.CreateProjectColumnOption{}), repo.CreateProjectColumn)
+					})
+					m.Group("/columns/{id}", func() {
+						m.Combo("").
+							Patch(reqToken(), reqRepoWriter(unit.TypeProjects), bind(api.EditProjectColumnOption{}), repo.EditProjectColumn).
+							Delete(reqToken(), reqRepoWriter(unit.TypeProjects), repo.DeleteProjectColumn)
+					})
+				}, reqRepoReader(unit.TypeProjects))
+			}, repoAssignment(), checkTokenPublicOnly())
+		}, tokenRequiresScopes(auth_model.AccessTokenScopeCategoryIssue))
 
 		// Artifacts direct download endpoint authenticates via signed url
 		// it is protected by the "sig" parameter (to help to access private repo), so no need to use other middlewares
