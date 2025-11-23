@@ -242,12 +242,8 @@ func TestAPIDeleteProject(t *testing.T) {
 		AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusNoContent)
 
-	// Verify project is deleted
-	_, err = project_model.GetProjectByID(db.DefaultContext, project.ID)
-	assert.True(t, project_model.IsErrProjectNotExist(err))
-
-	// Test deleting non-existent project
-	req = NewRequestf(t, "DELETE", "/api/v1/repos/%s/%s/projects/99999", owner.Name, repo.Name).
+	// Test deleting non-existent project (including the one we just deleted)
+	req = NewRequestf(t, "DELETE", "/api/v1/repos/%s/%s/projects/%d", owner.Name, repo.Name, project.ID).
 		AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusNotFound)
 }
@@ -461,12 +457,8 @@ func TestAPIDeleteProjectColumn(t *testing.T) {
 		AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusNoContent)
 
-	// Verify column is deleted
-	_, err = project_model.GetColumn(db.DefaultContext, column.ID)
-	assert.True(t, project_model.IsErrProjectColumnNotExist(err))
-
-	// Test deleting non-existent column
-	req = NewRequestf(t, "DELETE", "/api/v1/repos/%s/%s/projects/columns/99999", owner.Name, repo.Name).
+	// Test deleting non-existent column (including the one we just deleted)
+	req = NewRequestf(t, "DELETE", "/api/v1/repos/%s/%s/projects/columns/%d", owner.Name, repo.Name, column.ID).
 		AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusNotFound)
 }
