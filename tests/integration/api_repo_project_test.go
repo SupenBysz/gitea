@@ -243,9 +243,8 @@ func TestAPIDeleteProject(t *testing.T) {
 	MakeRequest(t, req, http.StatusNoContent)
 
 	// Verify project is deleted
-	exists, err := project_model.ExistsProjectByID(t.Context(), project.ID)
-	assert.NoError(t, err)
-	assert.False(t, exists)
+	_, err = project_model.GetProjectByID(db.DefaultContext, project.ID)
+	assert.True(t, project_model.IsErrProjectNotExist(err))
 
 	// Test deleting non-existent project
 	req = NewRequestf(t, "DELETE", "/api/v1/repos/%s/%s/projects/99999", owner.Name, repo.Name).
@@ -463,9 +462,8 @@ func TestAPIDeleteProjectColumn(t *testing.T) {
 	MakeRequest(t, req, http.StatusNoContent)
 
 	// Verify column is deleted
-	exists, err := project_model.ExistsColumnByID(t.Context(), column.ID)
-	assert.NoError(t, err)
-	assert.False(t, exists)
+	_, err = project_model.GetColumn(db.DefaultContext, column.ID)
+	assert.True(t, project_model.IsErrProjectColumnNotExist(err))
 
 	// Test deleting non-existent column
 	req = NewRequestf(t, "DELETE", "/api/v1/repos/%s/%s/projects/columns/99999", owner.Name, repo.Name).
@@ -519,9 +517,7 @@ func TestAPIAddIssueToProjectColumn(t *testing.T) {
 	MakeRequest(t, req, http.StatusCreated)
 
 	// Verify issue is in the column
-	projectIssue, err := project_model.GetProjectIssue(t.Context(), issue.ID)
-	assert.NoError(t, err)
-	assert.NotNil(t, projectIssue)
+	projectIssue := unittest.AssertExistsAndLoadBean(t, &project_model.ProjectIssue{IssueID: issue.ID})
 	assert.Equal(t, column1.ID, projectIssue.ProjectColumnID)
 
 	// Test moving issue to another column
@@ -531,8 +527,7 @@ func TestAPIAddIssueToProjectColumn(t *testing.T) {
 	MakeRequest(t, req, http.StatusCreated)
 
 	// Verify issue moved to new column
-	projectIssue, err = project_model.GetProjectIssue(t.Context(), issue.ID)
-	assert.NoError(t, err)
+	projectIssue = unittest.AssertExistsAndLoadBean(t, &project_model.ProjectIssue{IssueID: issue.ID})
 	assert.Equal(t, column2.ID, projectIssue.ProjectColumnID)
 
 	// Test adding same issue to same column (should be idempotent)
