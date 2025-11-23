@@ -27,7 +27,7 @@ func TestAPIListProjects(t *testing.T) {
 	repoOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
 
 	session := loginUser(t, repoOwner.Name)
-	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadIssue)
 
 	req := NewRequest(t, "GET", fmt.Sprintf("/api/v1/repos/%s/%s/projects", repoOwner.Name, repo.Name)).
 		AddTokenAuth(token)
@@ -47,7 +47,7 @@ func TestAPIGetProject(t *testing.T) {
 	repoOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
 
 	session := loginUser(t, repoOwner.Name)
-	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadIssue)
 
 	req := NewRequest(t, "GET", fmt.Sprintf("/api/v1/repos/%s/%s/projects/%d", repoOwner.Name, repo.Name, project.ID)).
 		AddTokenAuth(token)
@@ -67,7 +67,7 @@ func TestAPICreateProject(t *testing.T) {
 	repoOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
 
 	session := loginUser(t, repoOwner.Name)
-	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteIssue)
 
 	opts := api.CreateProjectOption{
 		Title: "Test Project API",
@@ -95,7 +95,7 @@ func TestAPIListProjectColumns(t *testing.T) {
 	repoOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
 
 	session := loginUser(t, repoOwner.Name)
-	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadIssue)
 
 	req := NewRequest(t, "GET", fmt.Sprintf("/api/v1/repos/%s/%s/projects/%d/columns", repoOwner.Name, repo.Name, project.ID)).
 		AddTokenAuth(token)
@@ -115,7 +115,7 @@ func TestAPICreateProjectColumn(t *testing.T) {
 	repoOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
 
 	session := loginUser(t, repoOwner.Name)
-	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteIssue)
 
 	opts := api.CreateProjectColumnOption{
 		Title: "Test Column API",
@@ -143,7 +143,7 @@ func TestAPIDeleteProject(t *testing.T) {
 	repoOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
 
 	session := loginUser(t, repoOwner.Name)
-	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteIssue)
 
 	req := NewRequest(t, "DELETE", fmt.Sprintf("/api/v1/repos/%s/%s/projects/%d", repoOwner.Name, repo.Name, project.ID)).
 		AddTokenAuth(token)
