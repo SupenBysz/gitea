@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "gitea": {
+    "url": "https://gitea.ktyun.cc",
+    "name": "gitea.ktyun.cc"
+  },
+  "project": {
+    "owner": "Kysion",
+    "repo": "entai-gitea-custom"
+  },
+  "defaults": {
+    "setAsDefaultContext": true
+  }
+}
