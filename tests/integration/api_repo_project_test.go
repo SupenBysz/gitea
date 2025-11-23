@@ -26,7 +26,7 @@ func TestAPIListProjects(t *testing.T) {
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
 
-	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeReadRepository)
+	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeReadIssue)
 
 	// Test listing all projects
 	req := NewRequestf(t, "GET", "/api/v1/repos/%s/%s/projects", owner.Name, repo.Name).
@@ -77,7 +77,7 @@ func TestAPIGetProject(t *testing.T) {
 		_ = project_model.DeleteProjectByID(t.Context(), project.ID)
 	}()
 
-	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeReadRepository)
+	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeReadIssue)
 
 	// Test getting the project
 	req := NewRequestf(t, "GET", "/api/v1/repos/%s/%s/projects/%d", owner.Name, repo.Name, project.ID).
@@ -103,7 +103,7 @@ func TestAPICreateProject(t *testing.T) {
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
 
-	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteRepository)
+	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteIssue)
 
 	// Test creating a project
 	req := NewRequestWithJSON(t, "POST", fmt.Sprintf("/api/v1/repos/%s/%s/projects", owner.Name, repo.Name), &api.CreateProjectOption{
@@ -172,7 +172,7 @@ func TestAPIUpdateProject(t *testing.T) {
 		_ = project_model.DeleteProjectByID(t.Context(), project.ID)
 	}()
 
-	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteRepository)
+	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteIssue)
 
 	// Test updating project title and description
 	newTitle := "Updated Project Title"
@@ -233,7 +233,7 @@ func TestAPIDeleteProject(t *testing.T) {
 	err := project_model.NewProject(t.Context(), project)
 	assert.NoError(t, err)
 
-	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteRepository)
+	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteIssue)
 
 	// Test deleting the project
 	req := NewRequestf(t, "DELETE", "/api/v1/repos/%s/%s/projects/%d", owner.Name, repo.Name, project.ID).
@@ -277,7 +277,7 @@ func TestAPIListProjectColumns(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeReadRepository)
+	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeReadIssue)
 
 	// Test listing columns
 	req := NewRequestf(t, "GET", "/api/v1/repos/%s/%s/projects/%d/columns", owner.Name, repo.Name, project.ID).
@@ -324,7 +324,7 @@ func TestAPICreateProjectColumn(t *testing.T) {
 		_ = project_model.DeleteProjectByID(t.Context(), project.ID)
 	}()
 
-	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteRepository)
+	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteIssue)
 
 	// Test creating a column with color
 	req := NewRequestWithJSON(t, "POST", fmt.Sprintf("/api/v1/repos/%s/%s/projects/%d/columns", owner.Name, repo.Name, project.ID), &api.CreateProjectColumnOption{
@@ -390,7 +390,7 @@ func TestAPIUpdateProjectColumn(t *testing.T) {
 	err = project_model.NewColumn(t.Context(), column)
 	assert.NoError(t, err)
 
-	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteRepository)
+	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteIssue)
 
 	// Test updating column title
 	newTitle := "Updated Column"
@@ -448,7 +448,7 @@ func TestAPIDeleteProjectColumn(t *testing.T) {
 	err = project_model.NewColumn(t.Context(), column)
 	assert.NoError(t, err)
 
-	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteRepository)
+	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteIssue)
 
 	// Test deleting the column
 	req := NewRequestf(t, "DELETE", "/api/v1/repos/%s/%s/projects/columns/%d", owner.Name, repo.Name, column.ID).
@@ -498,7 +498,7 @@ func TestAPIAddIssueToProjectColumn(t *testing.T) {
 	err = project_model.NewColumn(t.Context(), column2)
 	assert.NoError(t, err)
 
-	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteRepository)
+	token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteIssue)
 
 	// Test adding issue to column
 	req := NewRequestWithJSON(t, "POST", fmt.Sprintf("/api/v1/repos/%s/%s/projects/columns/%d/issues", owner.Name, repo.Name, column1.ID), &api.AddIssueToProjectColumnOption{
@@ -560,8 +560,8 @@ func TestAPIProjectPermissions(t *testing.T) {
 		_ = project_model.DeleteProjectByID(t.Context(), project.ID)
 	}()
 
-	ownerToken := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteRepository)
-	user2Token := getUserToken(t, user2.Name, auth_model.AccessTokenScopeWriteRepository)
+	ownerToken := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteIssue)
+	user2Token := getUserToken(t, user2.Name, auth_model.AccessTokenScopeWriteIssue)
 
 	// Owner should be able to read
 	req := NewRequestf(t, "GET", "/api/v1/repos/%s/%s/projects/%d", owner.Name, repo.Name, project.ID).
