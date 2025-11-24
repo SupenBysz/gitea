@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/modules/git"
@@ -137,10 +138,20 @@ func EditWikiPage(ctx *context.APIContext) {
 	form := web.GetForm(ctx).(*api.CreateWikiPageOptions)
 
 	oldWikiName := wiki_service.WebPathFromRequest(ctx.PathParamRaw("pageName"))
-	newWikiName := wiki_service.UserTitleToWebPath("", form.Title)
 
-	if len(newWikiName) == 0 {
+	// If no new title is provided, keep the original page name
+	var newWikiName wiki_service.WebPath
+	if form.Title == "" {
 		newWikiName = oldWikiName
+	} else {
+		// Check if the new title is the same as the current title to avoid unnecessary conversion
+		_, currentTitle := wiki_service.WebPathToUserTitle(oldWikiName)
+		if strings.TrimSpace(form.Title) == currentTitle {
+			// Title unchanged, keep the original WebPath to avoid encoding inconsistencies
+			newWikiName = oldWikiName
+		} else {
+			newWikiName = wiki_service.UserTitleToWebPath("", form.Title)
+		}
 	}
 
 	if len(form.Message) == 0 {
