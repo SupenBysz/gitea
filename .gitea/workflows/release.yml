@@ -11,6 +11,12 @@ on:
         required: false
         type: string
 
+# 并发控制：同一分支上只允许一个工作流运行
+# 当新的提交触发工作流时，会自动取消正在运行的旧工作流
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Job 1: 生成版本号
   generate-version:
