@@ -55,7 +55,7 @@ jobs:
       - name: 设置 Node.js 环境
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: 安装 pnpm
         run: npm install -g pnpm
@@ -73,7 +73,7 @@ jobs:
       - name: 编译前端
         run: |
           echo "🔨 编译前端资源..."
-          NODE_ENV=production pnpm build
+          NODE_ENV=production BROWSERSLIST_IGNORE_OLD_DATA=true pnpm exec webpack --disable-interpret
 
       - name: 上传前端构建产物
         uses: actions/upload-artifact@v4
