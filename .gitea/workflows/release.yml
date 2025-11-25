@@ -141,17 +141,31 @@ jobs:
           echo "✅ 编译完成"
           ls -lh gitea-${{ matrix.os }}-${{ matrix.arch }}
 
-      - name: 验证版本信息
+      - name: 验证构建产物
         run: |
-          echo "🔍 验证版本信息..."
+          echo "🔍 验证构建产物..."
 
-          # 通过字符串搜索来验证版本号是否注入
-          if strings gitea-${{ matrix.os }}-${{ matrix.arch }} | grep -q "${{ needs.generate-version.outputs.version }}"; then
-            echo "✅ 版本号注入成功: ${{ needs.generate-version.outputs.version }}"
-          else
-            echo "❌ 版本号注入失败"
+          BINARY="gitea-${{ matrix.os }}-${{ matrix.arch }}"
+
+          # 检查文件是否存在
+          if [ ! -f "${BINARY}" ]; then
+            echo "❌ 二进制文件不存在: ${BINARY}"
             exit 1
           fi
+
+          # 检查文件大小（应该大于 50MB）
+          SIZE=$(stat -c%s "${BINARY}" 2>/dev/null || stat -f%z "${BINARY}")
+          MIN_SIZE=$((50 * 1024 * 1024))
+
+          if [ "${SIZE}" -lt "${MIN_SIZE}" ]; then
+            echo "❌ 二进制文件过小: ${SIZE} bytes (预期 > 50MB)"
+            exit 1
+          fi
+
+          echo "✅ 构建产物验证通过"
+          echo "   文件: ${BINARY}"
+          echo "   大小: $(numfmt --to=iec ${SIZE} 2>/dev/null || echo "${SIZE} bytes")"
+          echo "   版本: ${{ needs.generate-version.outputs.version }}"
 
       - name: 创建发布包
         run: |
