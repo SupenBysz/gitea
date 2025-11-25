@@ -26,7 +26,7 @@ import (
 
 // these flags will be set by the build flags
 var (
-	Version     = "1.25.2-kysion" // program version for this build
+	Version     = "dev-Kysion" // program version for this build (will be overridden by ldflags in CI/CD)
 	Tags        = ""              // the Golang build tags
 	MakeVersion = ""              // "make" program version if built with make
 )

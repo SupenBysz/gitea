@@ -756,7 +756,30 @@ jobs:
 
           sshpass -p "${DEPLOY_PASSWORD}" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << ENDSSH
             echo "📋 Gitea 版本信息:"
-            /usr/local/bin/gitea --version
+            DEPLOYED_VERSION=\$(/usr/local/bin/gitea --version 2>&1 | head -1)
+            echo "\${DEPLOYED_VERSION}"
+
+            EXPECTED_VERSION="${VERSION}"
+            echo ""
+            echo "🔍 版本验证:"
+            echo "   期望版本: \${EXPECTED_VERSION}"
+            echo "   实际版本: \${DEPLOYED_VERSION}"
+
+            # 检查版本是否包含期望的版本号
+            if echo "\${DEPLOYED_VERSION}" | grep -q "\${EXPECTED_VERSION}"; then
+              echo "✅ 版本验证通过"
+            else
+              echo "⚠️ 版本不匹配，尝试重启服务..."
+              systemctl restart gitea 2>/dev/null || service gitea restart 2>/dev/null || true
+              sleep 10
+              NEW_VERSION=\$(/usr/local/bin/gitea --version 2>&1 | head -1)
+              echo "   重启后版本: \${NEW_VERSION}"
+              if echo "\${NEW_VERSION}" | grep -q "\${EXPECTED_VERSION}"; then
+                echo "✅ 重启后版本验证通过"
+              else
+                echo "❌ 版本仍不匹配，请手动检查部署"
+              fi
+            fi
 
             echo ""
             echo "📋 服务状态:"
