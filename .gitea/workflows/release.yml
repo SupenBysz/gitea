@@ -1,0 +1,197 @@
+name: Release Build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version_override:
+        description: '覆盖版本号（可选，格式：v1.25.2.1125-Kysion）'
+        required: false
+        type: string
+
+jobs:
+  build:
+    name: Build Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 设置 Go 环境
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: 设置 Node.js 环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装 pnpm
+        run: npm install -g pnpm
+
+      - name: 生成版本号
+        id: version
+        run: |
+          if [ -n "${{ inputs.version_override }}" ]; then
+            # 使用手动指定的版本号
+            VERSION="${{ inputs.version_override }}"
+          else
+            # 从 VERSION 文件读取基础版本
+            BASE_VERSION=$(cat VERSION | tr -d '\n')
+            # 生成日期（MMDD格式）
+            DATE=$(date +%m%d)
+            # 组合完整版本号
+            VERSION="v${BASE_VERSION}.${DATE}-Kysion"
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "✅ 生成版本号: ${VERSION}"
+
+      - name: 显示版本信息
+        run: |
+          echo "📦 准备构建版本: ${{ steps.version.outputs.version }}"
+          echo "🔨 Go版本: $(go version)"
+          echo "📦 Node版本: $(node --version)"
+          echo "📦 pnpm版本: $(pnpm --version)"
+
+      - name: 安装前端依赖
+        run: |
+          echo "📦 安装前端依赖..."
+          pnpm install --frozen-lockfile
+
+      - name: 编译前端
+        run: |
+          echo "🔨 编译前端资源..."
+          NODE_ENV=production pnpm build
+
+      - name: 编译后端 (Linux x86_64)
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
+          VERSION: ${{ steps.version.outputs.version }}
+          TAGS: "sqlite sqlite_unlock_notify"
+        run: |
+          echo "🔨 编译后端 (Linux x86_64)..."
+          go build \
+            -tags "${TAGS}" \
+            -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.Tags=${TAGS}'" \
+            -o gitea-linux-amd64 \
+            code.gitea.io/gitea
+
+          echo "✅ 编译完成"
+          ls -lh gitea-linux-amd64
+
+      - name: 验证版本信息
+        run: |
+          echo "🔍 验证版本信息..."
+          chmod +x gitea-linux-amd64
+
+          # 注意：由于是Linux二进制，在macOS上无法直接运行
+          # 我们通过字符串搜索来验证版本号是否注入
+          if strings gitea-linux-amd64 | grep -q "${{ steps.version.outputs.version }}"; then
+            echo "✅ 版本号注入成功: ${{ steps.version.outputs.version }}"
+          else
+            echo "❌ 版本号注入失败"
+            exit 1
+          fi
+
+      - name: 创建发布包
+        run: |
+          echo "📦 创建发布包..."
+
+          VERSION="${{ steps.version.outputs.version }}"
+          PACKAGE_NAME="gitea-${VERSION}-linux-amd64"
+          PACKAGE_DIR="${PACKAGE_NAME}"
+
+          # 创建打包目录
+          mkdir -p "${PACKAGE_DIR}"
+
+          # 复制二进制文件
+          cp gitea-linux-amd64 "${PACKAGE_DIR}/gitea"
+          chmod +x "${PACKAGE_DIR}/gitea"
+
+          # 复制资源文件
+          if [ -d "custom" ]; then
+            cp -r custom "${PACKAGE_DIR}/"
+          fi
+
+          if [ -d "templates" ]; then
+            cp -r templates "${PACKAGE_DIR}/"
+          fi
+
+          if [ -d "public" ]; then
+            cp -r public "${PACKAGE_DIR}/"
+          fi
+
+          if [ -d "options" ]; then
+            cp -r options "${PACKAGE_DIR}/"
+          fi
+
+          # 复制文档
+          if [ -f "LICENSE" ]; then
+            cp LICENSE "${PACKAGE_DIR}/"
+          fi
+
+          if [ -f "README.md" ]; then
+            cp README.md "${PACKAGE_DIR}/"
+          fi
+
+          # 创建启动脚本
+          cat > "${PACKAGE_DIR}/start.sh" << 'EOF'
+#!/bin/bash
+# Gitea 启动脚本
+
+set -e
+
+GITEA_WORK_DIR="${GITEA_WORK_DIR:-$(pwd)}"
+GITEA_CUSTOM="${GITEA_CUSTOM:-${GITEA_WORK_DIR}/custom}"
+
+export GITEA_WORK_DIR
+export GITEA_CUSTOM
+
+echo "🚀 启动 Gitea..."
+echo "工作目录: ${GITEA_WORK_DIR}"
+echo "自定义目录: ${GITEA_CUSTOM}"
+
+exec ./gitea web
+EOF
+
+          chmod +x "${PACKAGE_DIR}/start.sh"
+
+          # 创建 tar.gz 压缩包
+          tar czf "${PACKAGE_NAME}.tar.gz" "${PACKAGE_DIR}"
+
+          # 生成 SHA256 校验文件
+          sha256sum "${PACKAGE_NAME}.tar.gz" > "${PACKAGE_NAME}.tar.gz.sha256"
+
+          echo "✅ 发布包创建完成"
+          ls -lh "${PACKAGE_NAME}.tar.gz"
+          cat "${PACKAGE_NAME}.tar.gz.sha256"
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitea-${{ steps.version.outputs.version }}-linux-amd64
+          path: |
+            gitea-${{ steps.version.outputs.version }}-linux-amd64.tar.gz
+            gitea-${{ steps.version.outputs.version }}-linux-amd64.tar.gz.sha256
+          retention-days: 30
+
+      - name: 构建摘要
+        run: |
+          echo "## 🎉 构建完成" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**版本号**: \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**平台**: Linux x86_64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**产物**:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`gitea-${{ steps.version.outputs.version }}-linux-amd64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`gitea-${{ steps.version.outputs.version }}-linux-amd64.tar.gz.sha256\`" >> $GITHUB_STEP_SUMMARY
