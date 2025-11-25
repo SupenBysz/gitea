@@ -1,0 +1,442 @@
+name: Deploy to Production
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '要部署的版本号（如：v1.25.2.1125-Kysion）'
+        required: true
+        type: string
+      skip_backup:
+        description: '跳过备份（仅用于测试）'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  DEPLOY_HOST: '10.23.73.251'
+  DEPLOY_USER: 'gitea'
+  DEPLOY_PATH: '/data/gitea'
+  BACKUP_PATH: '/data/gitea/backups'
+  SERVICE_NAME: 'gitea'
+  HEALTH_CHECK_URL: 'http://10.23.73.251:3000'
+  MAX_BACKUPS: 3
+
+jobs:
+  deploy:
+    name: Deploy to Production Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 确定部署版本
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [ -n "${{ github.event.release.tag_name }}" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            echo "❌ 无法确定部署版本"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "📦 准备部署版本: ${VERSION}"
+
+      - name: 下载 Release 产物
+        env:
+          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          echo "📥 下载 linux-amd64 平台产物..."
+
+          # 获取 Release 信息
+          API_URL="${{ github.api_url }}/repos/${{ github.repository }}/releases"
+          RELEASE_INFO=$(curl -s "${API_URL}/tags/${VERSION}" \
+            -H "Authorization: token ${GITEA_TOKEN}")
+
+          # 获取产物下载链接
+          ASSET_URL=$(echo "${RELEASE_INFO}" | jq -r \
+            '.assets[] | select(.name | contains("linux-amd64.tar.gz") and (contains(".sha256") | not)) | .browser_download_url')
+
+          if [ -z "${ASSET_URL}" ]; then
+            echo "❌ 未找到 linux-amd64 产物"
+            exit 1
+          fi
+
+          echo "下载地址: ${ASSET_URL}"
+          curl -L -o gitea-release.tar.gz "${ASSET_URL}"
+
+          # 解压产物
+          tar -xzf gitea-release.tar.gz
+          echo "✅ 产物下载完成"
+
+      - name: 准备 SSH 连接
+        run: |
+          # 安装 SSH 客户端
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # 配置 SSH 密钥（需要在 Repository Secrets 中配置 DEPLOY_SSH_KEY）
+          if [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ]; then
+            echo "⚠️ 未配置 DEPLOY_SSH_KEY，将使用密码认证"
+            echo "请在 Repository Settings → Secrets 中配置 DEPLOY_SSH_KEY"
+          else
+            echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+          fi
+
+          # 添加主机密钥
+          ssh-keyscan -H ${DEPLOY_HOST} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          echo "✅ SSH 环境准备完成"
+
+      - name: 创建部署脚本
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SKIP_BACKUP: ${{ github.event.inputs.skip_backup || 'false' }}
+        run: |
+          cat > deploy.sh << 'DEPLOY_SCRIPT'
+          #!/bin/bash
+          set -e
+
+          VERSION="${VERSION}"
+          SKIP_BACKUP="${SKIP_BACKUP}"
+          DEPLOY_PATH="${DEPLOY_PATH}"
+          BACKUP_PATH="${BACKUP_PATH}"
+          SERVICE_NAME="${SERVICE_NAME}"
+          MAX_BACKUPS="${MAX_BACKUPS}"
+
+          echo "=========================================="
+          echo "🚀 开始部署 Gitea ${VERSION}"
+          echo "=========================================="
+
+          # 检查服务状态
+          echo "📊 检查服务状态..."
+          if systemctl is-active --quiet ${SERVICE_NAME}; then
+            CURRENT_VERSION=$(${DEPLOY_PATH}/gitea --version 2>/dev/null | head -n1 || echo "unknown")
+            echo "当前版本: ${CURRENT_VERSION}"
+            echo "目标版本: ${VERSION}"
+          else
+            echo "⚠️  服务未运行"
+          fi
+
+          # 创建备份目录
+          mkdir -p ${BACKUP_PATH}
+
+          # 备份当前版本
+          if [ "${SKIP_BACKUP}" != "true" ]; then
+            echo "💾 备份当前版本..."
+            BACKUP_NAME="gitea-backup-$(date +%Y%m%d-%H%M%S)"
+            BACKUP_DIR="${BACKUP_PATH}/${BACKUP_NAME}"
+            mkdir -p ${BACKUP_DIR}
+
+            # 备份二进制文件
+            if [ -f "${DEPLOY_PATH}/gitea" ]; then
+              cp ${DEPLOY_PATH}/gitea ${BACKUP_DIR}/
+              echo "✅ 二进制文件已备份"
+            fi
+
+            # 备份自定义配置（如果存在）
+            if [ -d "${DEPLOY_PATH}/custom" ]; then
+              cp -r ${DEPLOY_PATH}/custom ${BACKUP_DIR}/
+              echo "✅ 自定义配置已备份"
+            fi
+
+            # 记录备份信息
+            echo "${VERSION}" > ${BACKUP_DIR}/VERSION
+            echo "✅ 备份完成: ${BACKUP_DIR}"
+
+            # 清理旧备份（只保留最近 ${MAX_BACKUPS} 个）
+            cd ${BACKUP_PATH}
+            ls -t | tail -n +$((MAX_BACKUPS + 1)) | xargs -r rm -rf
+            echo "🧹 已清理旧备份"
+          else
+            echo "⚠️  跳过备份（测试模式）"
+          fi
+
+          # 停止服务
+          echo "⏸️  停止 Gitea 服务..."
+          if systemctl is-active --quiet ${SERVICE_NAME}; then
+            sudo systemctl stop ${SERVICE_NAME}
+            echo "✅ 服务已停止"
+          else
+            echo "⚠️  服务未运行，跳过停止"
+          fi
+
+          # 等待服务完全停止
+          sleep 2
+
+          # 替换二进制文件
+          echo "📦 替换二进制文件..."
+          cd /tmp/gitea-deploy
+
+          if [ -f "gitea" ]; then
+            sudo cp gitea ${DEPLOY_PATH}/gitea
+            sudo chown ${DEPLOY_USER}:${DEPLOY_USER} ${DEPLOY_PATH}/gitea
+            sudo chmod +x ${DEPLOY_PATH}/gitea
+            echo "✅ 二进制文件已替换"
+          else
+            echo "❌ 找不到二进制文件"
+            exit 1
+          fi
+
+          # 更新资源文件（如果产物中包含）
+          if [ -d "custom" ]; then
+            echo "📁 更新自定义配置..."
+            sudo cp -r custom/* ${DEPLOY_PATH}/custom/ 2>/dev/null || true
+          fi
+
+          if [ -d "templates" ]; then
+            echo "📁 更新模板文件..."
+            sudo cp -r templates ${DEPLOY_PATH}/ 2>/dev/null || true
+          fi
+
+          if [ -d "public" ]; then
+            echo "📁 更新静态资源..."
+            sudo cp -r public ${DEPLOY_PATH}/ 2>/dev/null || true
+          fi
+
+          if [ -d "options" ]; then
+            echo "📁 更新选项文件..."
+            sudo cp -r options ${DEPLOY_PATH}/ 2>/dev/null || true
+          fi
+
+          # 设置特殊权限（允许绑定低端口）
+          echo "🔐 设置文件权限..."
+          if command -v setcap >/dev/null 2>&1; then
+            sudo setcap 'cap_net_bind_service=+ep' ${DEPLOY_PATH}/gitea
+            echo "✅ 已设置 cap_net_bind_service 权限"
+          else
+            echo "⚠️  setcap 未安装，跳过权限设置"
+          fi
+
+          # 启动服务
+          echo "▶️  启动 Gitea 服务..."
+          sudo systemctl start ${SERVICE_NAME}
+
+          # 等待服务启动
+          echo "⏳ 等待服务启动..."
+          sleep 5
+
+          # 检查服务状态
+          if systemctl is-active --quiet ${SERVICE_NAME}; then
+            echo "✅ 服务启动成功"
+          else
+            echo "❌ 服务启动失败"
+            sudo systemctl status ${SERVICE_NAME} --no-pager || true
+            exit 1
+          fi
+
+          # 验证版本
+          DEPLOYED_VERSION=$(${DEPLOY_PATH}/gitea --version 2>/dev/null | head -n1 || echo "unknown")
+          echo "部署后版本: ${DEPLOYED_VERSION}"
+
+          echo "=========================================="
+          echo "✅ 部署完成！"
+          echo "=========================================="
+          DEPLOY_SCRIPT
+
+          chmod +x deploy.sh
+          echo "✅ 部署脚本已创建"
+
+      - name: 上传部署包到服务器
+        run: |
+          echo "📤 上传部署包到服务器..."
+
+          # 创建临时部署目录
+          if [ -f ~/.ssh/deploy_key ]; then
+            SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+            SCP_CMD="scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+          else
+            SSH_CMD="ssh -o StrictHostKeyChecking=no"
+            SCP_CMD="scp -o StrictHostKeyChecking=no"
+          fi
+
+          ${SSH_CMD} ${DEPLOY_USER}@${DEPLOY_HOST} "mkdir -p /tmp/gitea-deploy"
+
+          # 上传产物
+          EXTRACT_DIR=$(find . -maxdepth 1 -type d -name "gitea-*" | head -n1)
+          if [ -z "${EXTRACT_DIR}" ]; then
+            echo "❌ 找不到解压后的目录"
+            exit 1
+          fi
+
+          ${SCP_CMD} -r ${EXTRACT_DIR}/* ${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/gitea-deploy/
+
+          # 上传部署脚本
+          ${SCP_CMD} deploy.sh ${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/gitea-deploy/
+
+          echo "✅ 文件上传完成"
+
+      - name: 执行部署
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SKIP_BACKUP: ${{ github.event.inputs.skip_backup || 'false' }}
+        run: |
+          echo "🚀 执行部署..."
+
+          if [ -f ~/.ssh/deploy_key ]; then
+            SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+          else
+            SSH_CMD="ssh -o StrictHostKeyChecking=no"
+          fi
+
+          # 执行部署脚本
+          ${SSH_CMD} ${DEPLOY_USER}@${DEPLOY_HOST} \
+            "VERSION=${VERSION} SKIP_BACKUP=${SKIP_BACKUP} \
+             DEPLOY_PATH=${DEPLOY_PATH} BACKUP_PATH=${BACKUP_PATH} \
+             SERVICE_NAME=${SERVICE_NAME} MAX_BACKUPS=${MAX_BACKUPS} \
+             bash /tmp/gitea-deploy/deploy.sh"
+
+          # 清理临时文件
+          ${SSH_CMD} ${DEPLOY_USER}@${DEPLOY_HOST} "rm -rf /tmp/gitea-deploy"
+
+          echo "✅ 部署执行完成"
+
+      - name: 健康检查
+        run: |
+          echo "🏥 执行健康检查..."
+
+          MAX_RETRY=30
+          RETRY_INTERVAL=2
+
+          for i in $(seq 1 ${MAX_RETRY}); do
+            echo "尝试 ${i}/${MAX_RETRY}..."
+
+            if curl -f -s -o /dev/null ${HEALTH_CHECK_URL}; then
+              echo "✅ 健康检查通过"
+              exit 0
+            fi
+
+            if [ $i -lt ${MAX_RETRY} ]; then
+              sleep ${RETRY_INTERVAL}
+            fi
+          done
+
+          echo "❌ 健康检查失败"
+          exit 1
+
+      - name: 回滚（失败时）
+        if: failure()
+        run: |
+          echo "⚠️  部署失败，开始回滚..."
+
+          if [ -f ~/.ssh/deploy_key ]; then
+            SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+          else
+            SSH_CMD="ssh -o StrictHostKeyChecking=no"
+          fi
+
+          # 创建回滚脚本
+          cat > rollback.sh << 'ROLLBACK_SCRIPT'
+          #!/bin/bash
+          set -e
+
+          BACKUP_PATH="${BACKUP_PATH}"
+          DEPLOY_PATH="${DEPLOY_PATH}"
+          SERVICE_NAME="${SERVICE_NAME}"
+
+          echo "=========================================="
+          echo "⏪ 开始回滚到上一版本"
+          echo "=========================================="
+
+          # 查找最新的备份
+          LATEST_BACKUP=$(ls -t ${BACKUP_PATH} | head -n1)
+
+          if [ -z "${LATEST_BACKUP}" ]; then
+            echo "❌ 未找到备份，无法回滚"
+            exit 1
+          fi
+
+          BACKUP_DIR="${BACKUP_PATH}/${LATEST_BACKUP}"
+          echo "📦 使用备份: ${BACKUP_DIR}"
+
+          # 停止服务
+          echo "⏸️  停止服务..."
+          sudo systemctl stop ${SERVICE_NAME} 2>/dev/null || true
+          sleep 2
+
+          # 恢复二进制文件
+          if [ -f "${BACKUP_DIR}/gitea" ]; then
+            sudo cp ${BACKUP_DIR}/gitea ${DEPLOY_PATH}/gitea
+            sudo chown gitea:gitea ${DEPLOY_PATH}/gitea
+            sudo chmod +x ${DEPLOY_PATH}/gitea
+            echo "✅ 二进制文件已恢复"
+          fi
+
+          # 恢复自定义配置
+          if [ -d "${BACKUP_DIR}/custom" ]; then
+            sudo cp -r ${BACKUP_DIR}/custom ${DEPLOY_PATH}/
+            echo "✅ 自定义配置已恢复"
+          fi
+
+          # 设置权限
+          if command -v setcap >/dev/null 2>&1; then
+            sudo setcap 'cap_net_bind_service=+ep' ${DEPLOY_PATH}/gitea
+          fi
+
+          # 启动服务
+          echo "▶️  启动服务..."
+          sudo systemctl start ${SERVICE_NAME}
+          sleep 5
+
+          if systemctl is-active --quiet ${SERVICE_NAME}; then
+            CURRENT_VERSION=$(${DEPLOY_PATH}/gitea --version 2>/dev/null | head -n1 || echo "unknown")
+            echo "=========================================="
+            echo "✅ 回滚完成！"
+            echo "当前版本: ${CURRENT_VERSION}"
+            echo "=========================================="
+          else
+            echo "❌ 回滚后服务启动失败"
+            sudo systemctl status ${SERVICE_NAME} --no-pager || true
+            exit 1
+          fi
+          ROLLBACK_SCRIPT
+
+          # 上传回滚脚本
+          if [ -f ~/.ssh/deploy_key ]; then
+            SCP_CMD="scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+          else
+            SCP_CMD="scp -o StrictHostKeyChecking=no"
+          fi
+
+          ${SCP_CMD} rollback.sh ${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/
+
+          # 执行回滚
+          ${SSH_CMD} ${DEPLOY_USER}@${DEPLOY_HOST} \
+            "BACKUP_PATH=${BACKUP_PATH} DEPLOY_PATH=${DEPLOY_PATH} \
+             SERVICE_NAME=${SERVICE_NAME} bash /tmp/rollback.sh"
+
+          echo "✅ 回滚完成"
+
+      - name: 部署摘要
+        if: always()
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          echo "## 📋 部署摘要" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "### ✅ 部署成功" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **版本**: ${VERSION}" >> $GITHUB_STEP_SUMMARY
+            echo "- **服务器**: ${DEPLOY_HOST}" >> $GITHUB_STEP_SUMMARY
+            echo "- **部署路径**: ${DEPLOY_PATH}" >> $GITHUB_STEP_SUMMARY
+            echo "- **健康检查**: ✅ 通过" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "🎉 服务已成功更新并运行！" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ 部署失败" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **版本**: ${VERSION}" >> $GITHUB_STEP_SUMMARY
+            echo "- **服务器**: ${DEPLOY_HOST}" >> $GITHUB_STEP_SUMMARY
+            echo "- **状态**: 已自动回滚到上一版本" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ 请检查日志排查问题" >> $GITHUB_STEP_SUMMARY
+          fi
