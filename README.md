@@ -1,6 +1,6 @@
 # Gitea - Kysion Custom Edition
 
-> CI/CD 自动化系统验收测试 - 第四次触发测试（工作流已重置）
+> CI/CD 自动化系统验收测试 - Runner 已安装
 
 [![](https://github.com/go-gitea/gitea/actions/workflows/release-nightly.yml/badge.svg?branch=main)](https://github.com/go-gitea/gitea/actions/workflows/release-nightly.yml?query=branch%3Amain "Release Nightly")
 [![](https://img.shields.io/discord/322538954119184384.svg?logo=discord&logoColor=white&label=Discord&color=5865F2)](https://discord.gg/Gitea "Join the Discord chat at https://discord.gg/Gitea")
