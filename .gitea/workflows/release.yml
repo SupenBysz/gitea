@@ -728,6 +728,9 @@ jobs:
             cp \${PACKAGE_NAME}/gitea /data/gitea/gitea
             chmod +x /data/gitea/gitea
 
+            echo "🔧 设置 capabilities（允许绑定 80/443 端口）..."
+            setcap 'cap_net_bind_service=+ep' /data/gitea/gitea
+
             echo "🔍 验证新版本..."
             /data/gitea/gitea --version
 
