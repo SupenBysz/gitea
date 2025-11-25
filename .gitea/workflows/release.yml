@@ -605,9 +605,11 @@ jobs:
           echo "下载 URL: ${DOWNLOAD_URL}"
           mkdir -p /tmp/gitea-deploy
 
-          # 使用 browser_download_url 下载，添加 token 认证头
-          # Gitea 的 /attachments/{uuid} 端点支持 token 认证
-          curl -sL -H "Authorization: token ${GITEA_TOKEN}" "${DOWNLOAD_URL}" -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
+          # 使用 browser_download_url 下载
+          # 对于内部仓库，Gitea 的 /attachments/{uuid} 端点需要使用 ?token= 查询参数认证
+          # Authorization header 在某些 Gitea 版本中对 attachments 端点不生效
+          DOWNLOAD_URL_WITH_TOKEN="${DOWNLOAD_URL}?token=${GITEA_TOKEN}"
+          curl -sL "${DOWNLOAD_URL_WITH_TOKEN}" -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
 
           # 验证下载
           if [ ! -f "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" ]; then
