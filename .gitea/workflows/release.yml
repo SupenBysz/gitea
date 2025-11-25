@@ -561,104 +561,85 @@ jobs:
 
           echo "✅ 生产服务器数据备份成功"
 
-      - name: 下载发布包到 Runner
+      - name: 从本地文件系统获取并部署新版本
         env:
           GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "🚀 开始下载发布包: ${VERSION}"
+          echo "🚀 开始部署新版本到生产服务器: ${VERSION}"
 
-          # 确定目标平台（生产服务器通常是 linux-amd64）
+          # 确定目标平台（生产服务器是 linux-amd64）
           PLATFORM="linux-amd64"
           PACKAGE_NAME="gitea-${VERSION}-${PLATFORM}"
           API_URL="${{ github.api_url }}/repos/${{ github.repository }}/releases/tags/${VERSION}"
 
-          echo "📡 从 API 获取 Release 信息..."
+          echo "📡 从 API 获取 Release Asset UUID..."
           echo "API URL: ${API_URL}"
 
           # 获取 Release 信息
           RELEASE_INFO=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" "${API_URL}")
 
-          # 从 Release 信息中提取 browser_download_url（指向 /attachments/{uuid}）
-          # Gitea API /releases/{id}/assets/{id} 只返回 JSON 元数据，不返回二进制文件
-          # 需要使用 browser_download_url 下载实际文件，并添加 token 认证
-          # 同一个 Release 可能有多次构建产生的同名资源，需要获取最新的（ID 最大的）
+          # 获取最新的 Asset UUID（同一个 Release 可能有多次构建产生的同名资源）
           ASSET_INFO=$(echo "${RELEASE_INFO}" | jq -r "[.assets[] | select(.name == \"${PACKAGE_NAME}.tar.gz\")] | sort_by(.id) | last")
-          ASSET_ID=$(echo "${ASSET_INFO}" | jq -r '.id')
-          DOWNLOAD_URL=$(echo "${ASSET_INFO}" | jq -r '.browser_download_url')
+          ASSET_UUID=$(echo "${ASSET_INFO}" | jq -r '.uuid')
 
-          if [ -z "${ASSET_ID}" ] || [ "${ASSET_ID}" = "null" ]; then
-            echo "❌ 无法获取 Asset ID，Release 资源可能不存在"
+          if [ -z "${ASSET_UUID}" ] || [ "${ASSET_UUID}" = "null" ]; then
+            echo "❌ 无法获取 Asset UUID，Release 资源可能不存在"
             echo "正在查找的文件: ${PACKAGE_NAME}.tar.gz"
             echo "可用的 Assets:"
-            echo "${RELEASE_INFO}" | jq '.assets[] | {id: .id, name: .name}' 2>/dev/null || echo "${RELEASE_INFO}"
+            echo "${RELEASE_INFO}" | jq '.assets[] | {id: .id, name: .name, uuid: .uuid}' 2>/dev/null || echo "${RELEASE_INFO}"
             exit 1
           fi
 
-          if [ -z "${DOWNLOAD_URL}" ] || [ "${DOWNLOAD_URL}" = "null" ]; then
-            echo "❌ 无法获取下载 URL"
-            echo "${ASSET_INFO}" | jq '.' 2>/dev/null || echo "${ASSET_INFO}"
-            exit 1
-          fi
+          echo "✅ 找到 Asset UUID: ${ASSET_UUID}"
 
-          echo "✅ 找到 Asset ID: ${ASSET_ID}"
-          echo "📥 下载发布包到 Runner..."
-          mkdir -p /tmp/gitea-deploy
+          # Gitea 附件存储路径格式: /data/gitea/data/attachments/{uuid[0:2]}/{uuid}
+          # 例如 UUID "5e311272-b913-4640-bad3-8956683f1c90" 存储在:
+          # /data/gitea/data/attachments/5e/5e311272-b913-4640-bad3-8956683f1c90
+          UUID_PREFIX=$(echo "${ASSET_UUID}" | cut -c1-2)
+          GITEA_DATA_DIR="/data/gitea/data"
+          ATTACHMENT_PATH="${GITEA_DATA_DIR}/attachments/${UUID_PREFIX}/${ASSET_UUID}"
 
-          # 使用 Gitea 官方 API 端点下载 release asset
-          # GET /api/v1/repos/{owner}/{repo}/releases/assets/{id}
-          # 需要添加 Accept: application/octet-stream 头部来获取二进制内容
-          # 这个端点支持 Authorization header 认证，适用于内部仓库
-          ASSET_API_URL="${{ github.api_url }}/repos/${{ github.repository }}/releases/assets/${ASSET_ID}"
-          echo "下载 API URL: ${ASSET_API_URL}"
+          echo "📁 Attachment 路径: ${ATTACHMENT_PATH}"
 
-          curl -sL \
-            -H "Authorization: token ${GITEA_TOKEN}" \
-            -H "Accept: application/octet-stream" \
-            "${ASSET_API_URL}" \
-            -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
+          # 由于 Gitea 服务器 (10.23.73.251) 就是部署目标服务器
+          # 我们可以直接在服务器上从本地文件系统复制附件，无需通过 HTTP API 下载
+          # 这样可以绕过 Gitea API token 无法下载 release assets 的已知限制
+          # 参考: https://github.com/go-gitea/gitea/issues/26165
 
-          # 验证下载
-          if [ ! -f "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" ]; then
-            echo "❌ 下载失败"
-            exit 1
-          fi
-
-          # 检查文件大小（应该大于 30MB）
-          FILE_SIZE=$(stat -c%s "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" 2>/dev/null || stat -f%z "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" 2>/dev/null || echo "0")
-          if [ "${FILE_SIZE}" -lt 30000000 ]; then
-            echo "❌ 文件大小异常: ${FILE_SIZE} bytes (期望 > 30MB)"
-            echo "文件内容预览:"
-            head -c 500 "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" || true
-            exit 1
-          fi
-
-          echo "✅ 下载完成，文件大小: ${FILE_SIZE} bytes"
-          ls -lh /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
-
-      - name: 传输并部署新版本
-        run: |
-          echo "🚀 开始部署新版本到生产服务器: ${VERSION}"
-
-          PLATFORM="linux-amd64"
-          PACKAGE_NAME="gitea-${VERSION}-${PLATFORM}"
-
-          # 使用 SCP 传输文件到生产服务器
-          echo "📤 传输发布包到生产服务器..."
-          sshpass -p "${DEPLOY_PASSWORD}" scp -o StrictHostKeyChecking=no /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz ${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/${PACKAGE_NAME}.tar.gz
-
-          echo "✅ 文件传输完成"
-
-          # 在生产服务器上部署
           sshpass -p "${DEPLOY_PASSWORD}" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << ENDSSH
             set -e
 
-            echo "📦 解压发布包..."
+            echo "🔍 验证附件文件存在..."
+            ATTACHMENT_PATH="${ATTACHMENT_PATH}"
+            PACKAGE_NAME="${PACKAGE_NAME}"
+            VERSION="${VERSION}"
+
+            if [ ! -f "\${ATTACHMENT_PATH}" ]; then
+              echo "❌ 附件文件不存在: \${ATTACHMENT_PATH}"
+              echo "检查 attachments 目录结构:"
+              ls -la ${GITEA_DATA_DIR}/attachments/ | head -20
+              exit 1
+            fi
+
+            FILE_SIZE=\$(stat -c%s "\${ATTACHMENT_PATH}" 2>/dev/null || stat -f%z "\${ATTACHMENT_PATH}" 2>/dev/null || echo "0")
+            echo "✅ 找到附件文件，大小: \${FILE_SIZE} bytes"
+
+            if [ "\${FILE_SIZE}" -lt 30000000 ]; then
+              echo "❌ 文件大小异常: \${FILE_SIZE} bytes (期望 > 30MB)"
+              exit 1
+            fi
+
+            echo "📦 准备部署目录..."
             cd /tmp
-            rm -rf gitea-deploy-${VERSION}
-            mkdir -p gitea-deploy-${VERSION}
-            cd gitea-deploy-${VERSION}
-            mv /tmp/${PACKAGE_NAME}.tar.gz .
-            tar xzf ${PACKAGE_NAME}.tar.gz
+            rm -rf gitea-deploy-\${VERSION}
+            mkdir -p gitea-deploy-\${VERSION}
+            cd gitea-deploy-\${VERSION}
+
+            echo "📋 复制附件文件..."
+            cp "\${ATTACHMENT_PATH}" ./\${PACKAGE_NAME}.tar.gz
+
+            echo "📦 解压发布包..."
+            tar xzf \${PACKAGE_NAME}.tar.gz
 
             echo "🛑 停止 Gitea 服务..."
             systemctl stop gitea 2>/dev/null || service gitea stop 2>/dev/null || true
@@ -672,7 +653,7 @@ jobs:
             fi
 
             echo "📦 部署新版本..."
-            cp ${PACKAGE_NAME}/gitea /usr/local/bin/gitea
+            cp \${PACKAGE_NAME}/gitea /usr/local/bin/gitea
             chmod +x /usr/local/bin/gitea
 
             echo "🔍 验证新版本..."
@@ -690,9 +671,9 @@ jobs:
             # 清理临时文件
             echo "🧹 清理临时文件..."
             cd /tmp
-            rm -rf gitea-deploy-${VERSION}
+            rm -rf gitea-deploy-\${VERSION}
 
-            echo "✅ 部署完成: ${VERSION}"
+            echo "✅ 部署完成: \${VERSION}"
           ENDSSH
 
           echo "✅ 新版本部署成功"
