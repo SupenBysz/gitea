@@ -76,7 +76,7 @@ jobs:
           NODE_ENV=production BROWSERSLIST_IGNORE_OLD_DATA=true pnpm exec webpack --disable-interpret
 
       - name: 上传前端构建产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: frontend-build
           path: |
@@ -118,7 +118,7 @@ jobs:
           echo "📦 版本号: ${{ needs.generate-version.outputs.version }}"
 
       - name: 下载前端构建产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: frontend-build
           path: public/assets/
@@ -230,7 +230,7 @@ jobs:
           cat "${PACKAGE_NAME}.tar.gz.sha256"
 
       - name: 上传构建产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: gitea-${{ needs.generate-version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}
           path: |
@@ -276,7 +276,7 @@ jobs:
           fetch-depth: 0
 
       - name: 下载所有构建产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           path: artifacts/
 
