@@ -562,13 +562,31 @@ jobs:
           echo "✅ 生产服务器数据备份成功"
 
       - name: 下载并部署新版本
+        env:
+          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "🚀 开始部署新版本: ${VERSION}"
 
           # 确定目标平台（生产服务器通常是 linux-amd64）
           PLATFORM="linux-amd64"
           PACKAGE_NAME="gitea-${VERSION}-${PLATFORM}"
-          DOWNLOAD_URL="${{ github.server_url }}/${{ github.repository }}/releases/download/${VERSION}/${PACKAGE_NAME}.tar.gz"
+          API_URL="${{ github.api_url }}/repos/${{ github.repository }}/releases/tags/${VERSION}"
+
+          echo "📡 从 API 获取 Release 信息..."
+          echo "API URL: ${API_URL}"
+
+          # 获取 Release 信息并提取 linux-amd64.tar.gz 的下载 URL
+          RELEASE_INFO=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" "${API_URL}")
+          DOWNLOAD_URL=$(echo "${RELEASE_INFO}" | jq -r ".assets[] | select(.name == \"${PACKAGE_NAME}.tar.gz\") | .browser_download_url" | tail -1)
+
+          if [ -z "${DOWNLOAD_URL}" ] || [ "${DOWNLOAD_URL}" = "null" ]; then
+            echo "❌ 无法获取下载 URL，Release 资源可能不存在"
+            echo "Release Info:"
+            echo "${RELEASE_INFO}" | jq '.assets[].name' 2>/dev/null || echo "${RELEASE_INFO}"
+            exit 1
+          fi
+
+          echo "✅ 下载 URL: ${DOWNLOAD_URL}"
 
           sshpass -p "${DEPLOY_PASSWORD}" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << ENDSSH
             set -e
@@ -579,12 +597,21 @@ jobs:
             mkdir -p gitea-deploy-${VERSION}
             cd gitea-deploy-${VERSION}
 
-            # 下载发布包
-            wget -q "${DOWNLOAD_URL}" -O ${PACKAGE_NAME}.tar.gz || curl -sLO "${DOWNLOAD_URL}"
+            # 下载发布包 (使用 -L 跟随重定向)
+            curl -sL "${DOWNLOAD_URL}" -o ${PACKAGE_NAME}.tar.gz
 
             # 验证下载
             if [ ! -f "${PACKAGE_NAME}.tar.gz" ]; then
               echo "❌ 下载失败: ${DOWNLOAD_URL}"
+              exit 1
+            fi
+
+            # 检查文件大小（应该大于 30MB）
+            FILE_SIZE=\$(stat -c%s "${PACKAGE_NAME}.tar.gz" 2>/dev/null || stat -f%z "${PACKAGE_NAME}.tar.gz" 2>/dev/null || echo "0")
+            if [ "\${FILE_SIZE}" -lt 30000000 ]; then
+              echo "❌ 文件大小异常: \${FILE_SIZE} bytes (期望 > 30MB)"
+              echo "文件内容预览:"
+              head -c 200 "${PACKAGE_NAME}.tar.gz" || true
               exit 1
             fi
 
