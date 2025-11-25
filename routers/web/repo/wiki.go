@@ -153,6 +153,20 @@ func wikiEntryByName(ctx *context.Context, commit *git.Commit, wikiName wiki_ser
 		return nil, "", false, false
 	}
 	if entry == nil {
+		// Try without dash marker as fallback for files created without it
+		gitFilenameNoDash := wiki_service.WebPathToGitPathWithoutDashMarker(wikiName)
+		if gitFilenameNoDash != gitFilename {
+			entry, err = findEntryForFile(commit, gitFilenameNoDash)
+			if err != nil && !git.IsErrNotExist(err) {
+				ctx.ServerError("findEntryForFile", err)
+				return nil, "", false, false
+			}
+			if entry != nil {
+				return entry, gitFilenameNoDash, false, false
+			}
+		}
+	}
+	if entry == nil {
 		// check if the file without ".md" suffix exists
 		gitFilename := strings.TrimSuffix(gitFilename, ".md")
 		entry, err = findEntryForFile(commit, gitFilename)
