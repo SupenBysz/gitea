@@ -101,12 +101,33 @@ jobs:
           echo "🔨 编译前端资源..."
           NODE_ENV=production BROWSERSLIST_IGNORE_OLD_DATA=true pnpm exec webpack --disable-interpret
 
-      - name: 上传前端构建产物
+      - name: 设置 Go 环境（用于生成 bindata）
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: 生成 bindata 文件
+        env:
+          TAGS: "bindata sqlite sqlite_unlock_notify"
+        run: |
+          echo "📦 生成 bindata 文件..."
+          # 运行 go generate 将前端资源嵌入 Go 代码
+          go generate -tags "${TAGS}" ./...
+          echo "✅ bindata 生成完成"
+          # 验证 bindata 文件已生成
+          ls -la modules/public/bindata.* 2>/dev/null || echo "public bindata files not found"
+          ls -la modules/options/bindata.* 2>/dev/null || echo "options bindata files not found"
+          ls -la modules/templates/bindata.* 2>/dev/null || echo "templates bindata files not found"
+
+      - name: 上传前端构建产物（包含 bindata）
         uses: actions/upload-artifact@v3
         with:
           name: frontend-build
           path: |
             public/assets/
+            modules/public/bindata.*
+            modules/options/bindata.*
+            modules/templates/bindata.*
           retention-days: 1
 
   # Job 3: 构建后端（多平台 matrix）
@@ -143,11 +164,19 @@ jobs:
           echo "🎯 目标平台: ${{ matrix.os }}-${{ matrix.arch }}"
           echo "📦 版本号: ${{ needs.generate-version.outputs.version }}"
 
-      - name: 下载前端构建产物
+      - name: 下载前端构建产物（包含 bindata）
         uses: actions/download-artifact@v3
         with:
           name: frontend-build
-          path: public/assets/
+          path: .
+
+      - name: 验证 bindata 文件
+        run: |
+          echo "🔍 验证 bindata 文件..."
+          ls -la public/assets/ | head -10
+          ls -la modules/public/bindata.* 2>/dev/null || echo "⚠️ public bindata 未找到"
+          ls -la modules/options/bindata.* 2>/dev/null || echo "⚠️ options bindata 未找到"
+          ls -la modules/templates/bindata.* 2>/dev/null || echo "⚠️ templates bindata 未找到"
 
       - name: 编译后端 (${{ matrix.os }}-${{ matrix.arch }})
         env:
@@ -155,9 +184,10 @@ jobs:
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 0
           VERSION: ${{ needs.generate-version.outputs.version }}
-          TAGS: "sqlite sqlite_unlock_notify"
+          TAGS: "bindata sqlite sqlite_unlock_notify"
         run: |
           echo "🔨 编译后端 (${{ matrix.os }}-${{ matrix.arch }})..."
+          echo "📦 使用 TAGS: ${TAGS}"
           go build \
             -tags "${TAGS}" \
             -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.Tags=${TAGS}'" \
@@ -179,12 +209,13 @@ jobs:
             exit 1
           fi
 
-          # 检查文件大小（应该大于 50MB）
+          # 检查文件大小（应该大于 80MB，包含 bindata 资源）
           SIZE=$(stat -c%s "${BINARY}" 2>/dev/null || stat -f%z "${BINARY}")
-          MIN_SIZE=$((50 * 1024 * 1024))
+          MIN_SIZE=$((80 * 1024 * 1024))
 
           if [ "${SIZE}" -lt "${MIN_SIZE}" ]; then
-            echo "❌ 二进制文件过小: ${SIZE} bytes (预期 > 50MB)"
+            echo "❌ 二进制文件过小: ${SIZE} bytes (预期 > 80MB)"
+            echo "⚠️ 可能原因: bindata 未正确嵌入，请检查 go generate 步骤"
             exit 1
           fi
 
