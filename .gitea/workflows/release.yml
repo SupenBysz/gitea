@@ -578,8 +578,15 @@ jobs:
           # 获取 Release 信息
           RELEASE_INFO=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" "${API_URL}")
 
-          # 提取 asset ID（Gitea 的 browser_download_url 不支持 token 认证，需要使用 API 端点）
+          # 提取 Release ID 和 Asset ID
+          RELEASE_ID=$(echo "${RELEASE_INFO}" | jq -r ".id")
           ASSET_ID=$(echo "${RELEASE_INFO}" | jq -r ".assets[] | select(.name == \"${PACKAGE_NAME}.tar.gz\") | .id" | tail -1)
+
+          if [ -z "${RELEASE_ID}" ] || [ "${RELEASE_ID}" = "null" ]; then
+            echo "❌ 无法获取 Release ID"
+            echo "${RELEASE_INFO}" | head -50
+            exit 1
+          fi
 
           if [ -z "${ASSET_ID}" ] || [ "${ASSET_ID}" = "null" ]; then
             echo "❌ 无法获取 Asset ID，Release 资源可能不存在"
@@ -588,11 +595,12 @@ jobs:
             exit 1
           fi
 
+          echo "✅ Release ID: ${RELEASE_ID}"
           echo "✅ Asset ID: ${ASSET_ID}"
 
           # 构建 API 下载 URL（使用 Gitea API 端点下载）
-          # Gitea API: GET /repos/{owner}/{repo}/releases/assets/{id}
-          DOWNLOAD_URL="${{ github.api_url }}/repos/${{ github.repository }}/releases/assets/${ASSET_ID}"
+          # Gitea API: GET /repos/{owner}/{repo}/releases/{release_id}/assets/{asset_id}
+          DOWNLOAD_URL="${{ github.api_url }}/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets/${ASSET_ID}"
           echo "📥 API 下载 URL: ${DOWNLOAD_URL}"
 
           # 在 Runner 上下载（使用 API 端点 + token 认证）
