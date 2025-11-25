@@ -561,11 +561,11 @@ jobs:
 
           echo "✅ 生产服务器数据备份成功"
 
-      - name: 下载并部署新版本
+      - name: 下载发布包到 Runner
         env:
           GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "🚀 开始部署新版本: ${VERSION}"
+          echo "🚀 开始下载发布包: ${VERSION}"
 
           # 确定目标平台（生产服务器通常是 linux-amd64）
           PLATFORM="linux-amd64"
@@ -588,37 +588,52 @@ jobs:
 
           echo "✅ 下载 URL: ${DOWNLOAD_URL}"
 
+          # 在 Runner 上下载（使用认证）
+          echo "📥 下载发布包到 Runner..."
+          mkdir -p /tmp/gitea-deploy
+          curl -sL -H "Authorization: token ${GITEA_TOKEN}" "${DOWNLOAD_URL}" -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
+
+          # 验证下载
+          if [ ! -f "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" ]; then
+            echo "❌ 下载失败"
+            exit 1
+          fi
+
+          # 检查文件大小（应该大于 30MB）
+          FILE_SIZE=$(stat -c%s "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" 2>/dev/null || stat -f%z "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" 2>/dev/null || echo "0")
+          if [ "${FILE_SIZE}" -lt 30000000 ]; then
+            echo "❌ 文件大小异常: ${FILE_SIZE} bytes (期望 > 30MB)"
+            echo "文件内容预览:"
+            head -c 200 "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" || true
+            exit 1
+          fi
+
+          echo "✅ 下载完成"
+          ls -lh /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
+
+      - name: 传输并部署新版本
+        run: |
+          echo "🚀 开始部署新版本到生产服务器: ${VERSION}"
+
+          PLATFORM="linux-amd64"
+          PACKAGE_NAME="gitea-${VERSION}-${PLATFORM}"
+
+          # 使用 SCP 传输文件到生产服务器
+          echo "📤 传输发布包到生产服务器..."
+          sshpass -p "${DEPLOY_PASSWORD}" scp -o StrictHostKeyChecking=no /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz ${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/${PACKAGE_NAME}.tar.gz
+
+          echo "✅ 文件传输完成"
+
+          # 在生产服务器上部署
           sshpass -p "${DEPLOY_PASSWORD}" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << ENDSSH
             set -e
 
-            echo "📥 下载新版本..."
+            echo "📦 解压发布包..."
             cd /tmp
-            rm -rf gitea-deploy-*
+            rm -rf gitea-deploy-${VERSION}
             mkdir -p gitea-deploy-${VERSION}
             cd gitea-deploy-${VERSION}
-
-            # 下载发布包 (使用 -L 跟随重定向)
-            curl -sL "${DOWNLOAD_URL}" -o ${PACKAGE_NAME}.tar.gz
-
-            # 验证下载
-            if [ ! -f "${PACKAGE_NAME}.tar.gz" ]; then
-              echo "❌ 下载失败: ${DOWNLOAD_URL}"
-              exit 1
-            fi
-
-            # 检查文件大小（应该大于 30MB）
-            FILE_SIZE=\$(stat -c%s "${PACKAGE_NAME}.tar.gz" 2>/dev/null || stat -f%z "${PACKAGE_NAME}.tar.gz" 2>/dev/null || echo "0")
-            if [ "\${FILE_SIZE}" -lt 30000000 ]; then
-              echo "❌ 文件大小异常: \${FILE_SIZE} bytes (期望 > 30MB)"
-              echo "文件内容预览:"
-              head -c 200 "${PACKAGE_NAME}.tar.gz" || true
-              exit 1
-            fi
-
-            echo "✅ 下载完成"
-            ls -lh ${PACKAGE_NAME}.tar.gz
-
-            echo "📦 解压发布包..."
+            mv /tmp/${PACKAGE_NAME}.tar.gz .
             tar xzf ${PACKAGE_NAME}.tar.gz
 
             echo "🛑 停止 Gitea 服务..."
