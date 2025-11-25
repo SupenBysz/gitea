@@ -575,23 +575,35 @@ jobs:
           echo "📡 从 API 获取 Release 信息..."
           echo "API URL: ${API_URL}"
 
-          # 获取 Release 信息并提取 linux-amd64.tar.gz 的下载 URL
+          # 获取 Release 信息
           RELEASE_INFO=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" "${API_URL}")
-          DOWNLOAD_URL=$(echo "${RELEASE_INFO}" | jq -r ".assets[] | select(.name == \"${PACKAGE_NAME}.tar.gz\") | .browser_download_url" | tail -1)
 
-          if [ -z "${DOWNLOAD_URL}" ] || [ "${DOWNLOAD_URL}" = "null" ]; then
-            echo "❌ 无法获取下载 URL，Release 资源可能不存在"
+          # 提取 asset ID（Gitea 的 browser_download_url 不支持 token 认证，需要使用 API 端点）
+          ASSET_ID=$(echo "${RELEASE_INFO}" | jq -r ".assets[] | select(.name == \"${PACKAGE_NAME}.tar.gz\") | .id" | tail -1)
+
+          if [ -z "${ASSET_ID}" ] || [ "${ASSET_ID}" = "null" ]; then
+            echo "❌ 无法获取 Asset ID，Release 资源可能不存在"
             echo "Release Info:"
             echo "${RELEASE_INFO}" | jq '.assets[].name' 2>/dev/null || echo "${RELEASE_INFO}"
             exit 1
           fi
 
-          echo "✅ 下载 URL: ${DOWNLOAD_URL}"
+          echo "✅ Asset ID: ${ASSET_ID}"
 
-          # 在 Runner 上下载（使用认证）
+          # 构建 API 下载 URL（使用 Gitea API 端点下载）
+          # Gitea API: GET /repos/{owner}/{repo}/releases/assets/{id}
+          DOWNLOAD_URL="${{ github.api_url }}/repos/${{ github.repository }}/releases/assets/${ASSET_ID}"
+          echo "📥 API 下载 URL: ${DOWNLOAD_URL}"
+
+          # 在 Runner 上下载（使用 API 端点 + token 认证）
           echo "📥 下载发布包到 Runner..."
           mkdir -p /tmp/gitea-deploy
-          curl -sL -H "Authorization: token ${GITEA_TOKEN}" "${DOWNLOAD_URL}" -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
+
+          # 使用 -L 跟随重定向，-J -O 保存原始文件名，或直接指定输出文件
+          curl -sL -H "Authorization: token ${GITEA_TOKEN}" \
+               -H "Accept: application/octet-stream" \
+               "${DOWNLOAD_URL}" \
+               -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
 
           # 验证下载
           if [ ! -f "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" ]; then
@@ -604,11 +616,11 @@ jobs:
           if [ "${FILE_SIZE}" -lt 30000000 ]; then
             echo "❌ 文件大小异常: ${FILE_SIZE} bytes (期望 > 30MB)"
             echo "文件内容预览:"
-            head -c 200 "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" || true
+            head -c 500 "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" || true
             exit 1
           fi
 
-          echo "✅ 下载完成"
+          echo "✅ 下载完成，文件大小: ${FILE_SIZE} bytes"
           ls -lh /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
 
       - name: 传输并部署新版本
