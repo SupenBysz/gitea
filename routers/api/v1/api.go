@@ -1492,6 +1492,7 @@ func Routes() *web.Router {
 						m.Combo("").
 							Patch(reqToken(), reqRepoWriter(unit.TypeProjects), bind(api.EditProjectColumnOption{}), repo.EditProjectColumn).
 							Delete(reqToken(), reqRepoWriter(unit.TypeProjects), repo.DeleteProjectColumn)
+						m.Post("/issues", reqToken(), reqRepoWriter(unit.TypeProjects), mustNotBeArchived, bind(api.AddIssueToProjectColumnOption{}), repo.AddIssueToProjectColumn)
 					})
 				}, reqRepoReader(unit.TypeProjects))
 			}, repoAssignment(), checkTokenPublicOnly())
