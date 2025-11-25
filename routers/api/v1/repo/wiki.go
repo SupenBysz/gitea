@@ -532,6 +532,14 @@ func wikiContentsByName(ctx *context.APIContext, commit *git.Commit, wikiName wi
 	entry, err := findEntryForFile(commit, gitFilename)
 	if err != nil {
 		if git.IsErrNotExist(err) {
+			// Try without dash marker as fallback for files created without it
+			gitFilenameNoDash := wiki_service.WebPathToGitPathWithoutDashMarker(wikiName)
+			if gitFilenameNoDash != gitFilename {
+				entry, err = findEntryForFile(commit, gitFilenameNoDash)
+				if err == nil {
+					return wikiContentsByEntry(ctx, entry), gitFilenameNoDash
+				}
+			}
 			if !isSidebarOrFooter {
 				ctx.APIErrorNotFound()
 			}

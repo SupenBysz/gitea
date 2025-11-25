@@ -110,6 +110,25 @@ func WebPathToGitPath(s WebPath) string {
 	return strings.Join(a, "/") + ".md"
 }
 
+// WebPathToGitPathWithoutDashMarker converts WebPath to git path without adding .- marker
+// This is useful for looking up files that were created without the dash marker
+func WebPathToGitPathWithoutDashMarker(s WebPath) string {
+	if strings.HasSuffix(string(s), ".md") {
+		ret, _ := url.PathUnescape(string(s))
+		return util.PathJoinRelX(ret)
+	}
+
+	a := strings.Split(string(s), "/")
+	for i := range a {
+		a[i], _ = unescapeSegment(a[i])
+		// Don't add dash marker, just URL encode and convert spaces
+		a[i] = url.QueryEscape(a[i])
+		a[i] = strings.ReplaceAll(a[i], "%20", " ")
+		a[i] = strings.ReplaceAll(a[i], "+", " ")
+	}
+	return strings.Join(a, "/") + ".md"
+}
+
 func GitPathToWebPath(s string) (wp WebPath, err error) {
 	if !strings.HasSuffix(s, ".md") {
 		return "", repo_model.ErrWikiInvalidFileName{FileName: s}
