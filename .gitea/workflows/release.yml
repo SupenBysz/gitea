@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version_override:
-        description: '覆盖版本号（可选，格式：v1.25.2.251125-Kysion）'
+        description: '覆盖版本号（可选，格式：v1.25.2.1125.1-Kysion）'
         required: false
         type: string
 
@@ -24,6 +24,8 @@ jobs:
 
       - name: 生成版本号
         id: version
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           if [ -n "${{ inputs.version_override }}" ]; then
             # 使用手动指定的版本号
@@ -31,10 +33,28 @@ jobs:
           else
             # 从 VERSION 文件读取基础版本
             BASE_VERSION=$(cat VERSION | tr -d '\n')
-            # 生成日期（YYMMDD格式，如 251125 表示 2025年11月25日）
-            DATE=$(date +%y%m%d)
-            # 组合完整版本号
-            VERSION="v${BASE_VERSION}.${DATE}-Kysion"
+            # 生成日期（MMDD格式，如 1125 表示 11月25日）
+            DATE=$(date +%m%d)
+
+            # 查询当天已有的 release 数量，计算递增序号
+            # 获取所有 releases 并筛选当天的版本
+            GITEA_URL="${GITHUB_SERVER_URL}"
+            REPO="${GITHUB_REPOSITORY}"
+
+            # 查询已有的 releases
+            RELEASES=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" \
+              "${GITEA_URL}/api/v1/repos/${REPO}/releases?limit=100" 2>/dev/null || echo "[]")
+
+            # 统计当天已有的发布数量（匹配 .MMDD. 格式）
+            TODAY_COUNT=$(echo "$RELEASES" | grep -o "\"tag_name\":\"v[^\"]*\.${DATE}\.[0-9]*-Kysion\"" | wc -l | tr -d ' ')
+
+            # 序号 = 当天发布数量 + 1
+            SEQ=$((TODAY_COUNT + 1))
+
+            echo "📊 当天已有 ${TODAY_COUNT} 个发布，本次序号: ${SEQ}"
+
+            # 组合完整版本号：v{BASE_VERSION}.{MMDD}.{序号}-Kysion
+            VERSION="v${BASE_VERSION}.${DATE}.${SEQ}-Kysion"
           fi
 
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
