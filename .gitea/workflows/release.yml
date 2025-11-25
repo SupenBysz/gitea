@@ -196,24 +196,28 @@ jobs:
           fi
 
           # 创建启动脚本
-          cat > "${PACKAGE_DIR}/start.sh" << 'EOF'
+          cat > "${PACKAGE_DIR}/start.sh" << 'STARTSCRIPT'
 #!/bin/bash
 # Gitea 启动脚本
 
 set -e
 
-GITEA_WORK_DIR="${GITEA_WORK_DIR:-$(pwd)}"
-GITEA_CUSTOM="${GITEA_CUSTOM:-${GITEA_WORK_DIR}/custom}"
+if [ -z "$GITEA_WORK_DIR" ]; then
+  GITEA_WORK_DIR="$(pwd)"
+fi
+if [ -z "$GITEA_CUSTOM" ]; then
+  GITEA_CUSTOM="${GITEA_WORK_DIR}/custom"
+fi
 
 export GITEA_WORK_DIR
 export GITEA_CUSTOM
 
-echo "🚀 启动 Gitea..."
-echo "工作目录: ${GITEA_WORK_DIR}"
-echo "自定义目录: ${GITEA_CUSTOM}"
+echo "Starting Gitea..."
+echo "Work directory: ${GITEA_WORK_DIR}"
+echo "Custom directory: ${GITEA_CUSTOM}"
 
 exec ./gitea web
-EOF
+STARTSCRIPT
 
           chmod +x "${PACKAGE_DIR}/start.sh"
 
