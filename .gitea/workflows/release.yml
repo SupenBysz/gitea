@@ -12,28 +12,15 @@ on:
         type: string
 
 jobs:
-  build:
-    name: Build Release
+  # Job 1: 生成版本号
+  generate-version:
+    name: Generate Version
     runs-on: ubuntu-latest
-
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: 设置 Go 环境
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-
-      - name: 设置 Node.js 环境
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: 安装 pnpm
-        run: npm install -g pnpm
 
       - name: 生成版本号
         id: version
@@ -56,7 +43,25 @@ jobs:
       - name: 显示版本信息
         run: |
           echo "📦 准备构建版本: ${{ steps.version.outputs.version }}"
-          echo "🔨 Go版本: $(go version)"
+
+  # Job 2: 构建前端（只构建一次）
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js 环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装 pnpm
+        run: npm install -g pnpm
+
+      - name: 显示环境信息
+        run: |
           echo "📦 Node版本: $(node --version)"
           echo "📦 pnpm版本: $(pnpm --version)"
 
@@ -70,33 +75,79 @@ jobs:
           echo "🔨 编译前端资源..."
           NODE_ENV=production pnpm build
 
-      - name: 编译后端 (Linux x86_64)
+      - name: 上传前端构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: |
+            public/assets/
+          retention-days: 1
+
+  # Job 3: 构建后端（多平台 matrix）
+  build-backend:
+    name: Build Backend (${{ matrix.os }}-${{ matrix.arch }})
+    needs: [generate-version, build-frontend]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: darwin
+            arch: arm64
+          - os: darwin
+            arch: amd64
+          - os: linux
+            arch: arm64
+          - os: linux
+            arch: amd64
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 设置 Go 环境
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: 显示环境信息
+        run: |
+          echo "🔨 Go版本: $(go version)"
+          echo "🎯 目标平台: ${{ matrix.os }}-${{ matrix.arch }}"
+          echo "📦 版本号: ${{ needs.generate-version.outputs.version }}"
+
+      - name: 下载前端构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: public/assets/
+
+      - name: 编译后端 (${{ matrix.os }}-${{ matrix.arch }})
         env:
-          GOOS: linux
-          GOARCH: amd64
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 0
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.generate-version.outputs.version }}
           TAGS: "sqlite sqlite_unlock_notify"
         run: |
-          echo "🔨 编译后端 (Linux x86_64)..."
+          echo "🔨 编译后端 (${{ matrix.os }}-${{ matrix.arch }})..."
           go build \
             -tags "${TAGS}" \
             -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.Tags=${TAGS}'" \
-            -o gitea-linux-amd64 \
+            -o gitea-${{ matrix.os }}-${{ matrix.arch }} \
             code.gitea.io/gitea
 
           echo "✅ 编译完成"
-          ls -lh gitea-linux-amd64
+          ls -lh gitea-${{ matrix.os }}-${{ matrix.arch }}
 
       - name: 验证版本信息
         run: |
           echo "🔍 验证版本信息..."
-          chmod +x gitea-linux-amd64
 
-          # 注意：由于是Linux二进制，在macOS上无法直接运行
-          # 我们通过字符串搜索来验证版本号是否注入
-          if strings gitea-linux-amd64 | grep -q "${{ steps.version.outputs.version }}"; then
-            echo "✅ 版本号注入成功: ${{ steps.version.outputs.version }}"
+          # 通过字符串搜索来验证版本号是否注入
+          if strings gitea-${{ matrix.os }}-${{ matrix.arch }} | grep -q "${{ needs.generate-version.outputs.version }}"; then
+            echo "✅ 版本号注入成功: ${{ needs.generate-version.outputs.version }}"
           else
             echo "❌ 版本号注入失败"
             exit 1
@@ -106,15 +157,16 @@ jobs:
         run: |
           echo "📦 创建发布包..."
 
-          VERSION="${{ steps.version.outputs.version }}"
-          PACKAGE_NAME="gitea-${VERSION}-linux-amd64"
+          VERSION="${{ needs.generate-version.outputs.version }}"
+          PLATFORM="${{ matrix.os }}-${{ matrix.arch }}"
+          PACKAGE_NAME="gitea-${VERSION}-${PLATFORM}"
           PACKAGE_DIR="${PACKAGE_NAME}"
 
           # 创建打包目录
           mkdir -p "${PACKAGE_DIR}"
 
           # 复制二进制文件
-          cp gitea-linux-amd64 "${PACKAGE_DIR}/gitea"
+          cp gitea-${{ matrix.os }}-${{ matrix.arch }} "${PACKAGE_DIR}/gitea"
           chmod +x "${PACKAGE_DIR}/gitea"
 
           # 复制资源文件
@@ -178,20 +230,34 @@ EOF
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: gitea-${{ steps.version.outputs.version }}-linux-amd64
+          name: gitea-${{ needs.generate-version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}
           path: |
-            gitea-${{ steps.version.outputs.version }}-linux-amd64.tar.gz
-            gitea-${{ steps.version.outputs.version }}-linux-amd64.tar.gz.sha256
+            gitea-${{ needs.generate-version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+            gitea-${{ needs.generate-version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}.tar.gz.sha256
           retention-days: 30
 
+  # Job 4: 构建摘要
+  build-summary:
+    name: Build Summary
+    needs: [generate-version, build-backend]
+    runs-on: ubuntu-latest
+    steps:
       - name: 构建摘要
         run: |
-          echo "## 🎉 构建完成" >> $GITHUB_STEP_SUMMARY
+          echo "## 🎉 多平台构建完成" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**版本号**: \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**版本号**: \`${{ needs.generate-version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**平台**: Linux x86_64" >> $GITHUB_STEP_SUMMARY
+          echo "**支持平台**:" >> $GITHUB_STEP_SUMMARY
+          echo "- 🍎 macOS ARM64 (darwin-arm64)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🍎 macOS x86_64 (darwin-amd64)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🐧 Linux ARM64 (linux-arm64)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🐧 Linux x86_64 (linux-amd64)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**产物**:" >> $GITHUB_STEP_SUMMARY
-          echo "- \`gitea-${{ steps.version.outputs.version }}-linux-amd64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`gitea-${{ steps.version.outputs.version }}-linux-amd64.tar.gz.sha256\`" >> $GITHUB_STEP_SUMMARY
+          echo "**产物列表**:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`gitea-${{ needs.generate-version.outputs.version }}-darwin-arm64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`gitea-${{ needs.generate-version.outputs.version }}-darwin-amd64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`gitea-${{ needs.generate-version.outputs.version }}-linux-arm64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`gitea-${{ needs.generate-version.outputs.version }}-linux-amd64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "💡 所有产物包含 SHA256 校验文件" >> $GITHUB_STEP_SUMMARY
