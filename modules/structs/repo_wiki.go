@@ -18,7 +18,9 @@ type WikiCommit struct {
 // WikiPage a wiki page
 type WikiPage struct {
 	*WikiPageMetaData
-	// Page content, base64 encoded
+	// Page content, base64 encoded (alias for ContentBase64)
+	Content string `json:"content"`
+	// Page content, base64 encoded (deprecated, use Content instead)
 	ContentBase64 string `json:"content_base64"`
 	// The number of commits that modified this page
 	CommitCount int64 `json:"commit_count"`
