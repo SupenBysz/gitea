@@ -215,8 +215,8 @@ func getWikiPage(ctx *context.APIContext, wikiName wiki_service.WebPath) *api.Wi
 
 	return &api.WikiPage{
 		WikiPageMetaData: wiki_service.ToWikiPageMetaData(wikiName, lastCommit, ctx.Repo.Repository),
-		Content:          content,          // New field name
-		ContentBase64:    content,          // Keep for backward compatibility
+		Content:          content,
+		ContentBase64:    content,
 		CommitCount:      commitsCount,
 		Sidebar:          sidebarContent,
 		Footer:           footerContent,
