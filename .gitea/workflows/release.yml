@@ -580,7 +580,8 @@ jobs:
 
           # 提取 browser_download_url（Gitea attachments URL，可公开访问）
           # Gitea 的 API 端点返回 JSON 元数据，实际文件需要通过 browser_download_url 下载
-          DOWNLOAD_URL=$(echo "${RELEASE_INFO}" | jq -r ".assets[] | select(.name == \"${PACKAGE_NAME}.tar.gz\") | .browser_download_url" | tail -1)
+          # 注意：同一个 Release 可能有多次构建产生的同名资源，需要获取最新的（ID 最大的）
+          DOWNLOAD_URL=$(echo "${RELEASE_INFO}" | jq -r "[.assets[] | select(.name == \"${PACKAGE_NAME}.tar.gz\")] | sort_by(.id) | last | .browser_download_url")
 
           if [ -z "${DOWNLOAD_URL}" ] || [ "${DOWNLOAD_URL}" = "null" ]; then
             echo "❌ 无法获取下载 URL，Release 资源可能不存在"
