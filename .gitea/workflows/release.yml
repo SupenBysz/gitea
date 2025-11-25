@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version_override:
-        description: '覆盖版本号（可选，格式：v1.25.2.1125-Kysion）'
+        description: '覆盖版本号（可选，格式：v1.25.2.251125-Kysion）'
         required: false
         type: string
 
@@ -31,8 +31,8 @@ jobs:
           else
             # 从 VERSION 文件读取基础版本
             BASE_VERSION=$(cat VERSION | tr -d '\n')
-            # 生成日期（MMDD格式）
-            DATE=$(date +%m%d)
+            # 生成日期（YYMMDD格式，如 251125 表示 2025年11月25日）
+            DATE=$(date +%y%m%d)
             # 组合完整版本号
             VERSION="v${BASE_VERSION}.${DATE}-Kysion"
           fi
