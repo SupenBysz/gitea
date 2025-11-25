@@ -215,6 +215,7 @@ func getWikiPage(ctx *context.APIContext, wikiName wiki_service.WebPath) *api.Wi
 
 	return &api.WikiPage{
 		WikiPageMetaData: wiki_service.ToWikiPageMetaData(wikiName, lastCommit, ctx.Repo.Repository),
+		Content:          content,
 		ContentBase64:    content,
 		CommitCount:      commitsCount,
 		Sidebar:          sidebarContent,
@@ -456,8 +457,14 @@ func ListPageRevisions(ctx *context.APIContext) {
 		return
 	}
 
+	// Convert commits to API format and return as array
+	result := make([]*api.WikiCommit, len(commitsHistory))
+	for i, commit := range commitsHistory {
+		result[i] = convert.ToWikiCommit(commit)
+	}
+
 	ctx.SetTotalCountHeader(commitsCount)
-	ctx.JSON(http.StatusOK, convert.ToWikiCommitList(commitsHistory, commitsCount))
+	ctx.JSON(http.StatusOK, result)
 }
 
 // findEntryForFile finds the tree entry for a target filepath.
