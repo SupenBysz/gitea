@@ -195,29 +195,27 @@ jobs:
             cp README.md "${PACKAGE_DIR}/"
           fi
 
-          # 创建启动脚本
-          cat > "${PACKAGE_DIR}/start.sh" << 'STARTSCRIPT'
-#!/bin/bash
-# Gitea 启动脚本
-
-set -e
-
-if [ -z "$GITEA_WORK_DIR" ]; then
-  GITEA_WORK_DIR="$(pwd)"
-fi
-if [ -z "$GITEA_CUSTOM" ]; then
-  GITEA_CUSTOM="${GITEA_WORK_DIR}/custom"
-fi
-
-export GITEA_WORK_DIR
-export GITEA_CUSTOM
-
-echo "Starting Gitea..."
-echo "Work directory: ${GITEA_WORK_DIR}"
-echo "Custom directory: ${GITEA_CUSTOM}"
-
-exec ./gitea web
-STARTSCRIPT
+          # 创建启动脚本（使用 echo 避免 heredoc YAML 解析问题）
+          echo '#!/bin/bash' > "${PACKAGE_DIR}/start.sh"
+          echo '# Gitea 启动脚本' >> "${PACKAGE_DIR}/start.sh"
+          echo '' >> "${PACKAGE_DIR}/start.sh"
+          echo 'set -e' >> "${PACKAGE_DIR}/start.sh"
+          echo '' >> "${PACKAGE_DIR}/start.sh"
+          echo 'if [ -z "$GITEA_WORK_DIR" ]; then' >> "${PACKAGE_DIR}/start.sh"
+          echo '  GITEA_WORK_DIR="$(pwd)"' >> "${PACKAGE_DIR}/start.sh"
+          echo 'fi' >> "${PACKAGE_DIR}/start.sh"
+          echo 'if [ -z "$GITEA_CUSTOM" ]; then' >> "${PACKAGE_DIR}/start.sh"
+          echo '  GITEA_CUSTOM="${GITEA_WORK_DIR}/custom"' >> "${PACKAGE_DIR}/start.sh"
+          echo 'fi' >> "${PACKAGE_DIR}/start.sh"
+          echo '' >> "${PACKAGE_DIR}/start.sh"
+          echo 'export GITEA_WORK_DIR' >> "${PACKAGE_DIR}/start.sh"
+          echo 'export GITEA_CUSTOM' >> "${PACKAGE_DIR}/start.sh"
+          echo '' >> "${PACKAGE_DIR}/start.sh"
+          echo 'echo "Starting Gitea..."' >> "${PACKAGE_DIR}/start.sh"
+          echo 'echo "Work directory: ${GITEA_WORK_DIR}"' >> "${PACKAGE_DIR}/start.sh"
+          echo 'echo "Custom directory: ${GITEA_CUSTOM}"' >> "${PACKAGE_DIR}/start.sh"
+          echo '' >> "${PACKAGE_DIR}/start.sh"
+          echo 'exec ./gitea web' >> "${PACKAGE_DIR}/start.sh"
 
           chmod +x "${PACKAGE_DIR}/start.sh"
 

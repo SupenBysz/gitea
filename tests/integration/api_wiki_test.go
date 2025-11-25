@@ -28,6 +28,9 @@ func TestAPIGetWikiPage(t *testing.T) {
 	var page *api.WikiPage
 	DecodeJSON(t, resp, &page)
 
+	expectedContent := base64.RawStdEncoding.EncodeToString(
+		[]byte("# Home page\n\nThis is the home page!\n"),
+	)
 	assert.Equal(t, &api.WikiPage{
 		WikiPageMetaData: &api.WikiPageMetaData{
 			Title:   "Home",
@@ -52,12 +55,11 @@ func TestAPIGetWikiPage(t *testing.T) {
 				Message: "Add Home.md\n",
 			},
 		},
-		ContentBase64: base64.RawStdEncoding.EncodeToString(
-			[]byte("# Home page\n\nThis is the home page!\n"),
-		),
-		CommitCount: 1,
-		Sidebar:     "",
-		Footer:      "",
+		Content:       expectedContent,
+		ContentBase64: expectedContent,
+		CommitCount:   1,
+		Sidebar:       "",
+		Footer:        "",
 	}, page)
 }
 
@@ -222,31 +224,28 @@ func TestAPIListPageRevisions(t *testing.T) {
 	req := NewRequest(t, "GET", urlStr)
 	resp := MakeRequest(t, req, http.StatusOK)
 
-	var revisions *api.WikiCommitList
+	var revisions []*api.WikiCommit
 	DecodeJSON(t, resp, &revisions)
 
-	dummyrevisions := &api.WikiCommitList{
-		WikiCommits: []*api.WikiCommit{
-			{
-				ID: "2c54faec6c45d31c1abfaecdab471eac6633738a",
-				Author: &api.CommitUser{
-					Identity: api.Identity{
-						Name:  "Ethan Koenig",
-						Email: "ethantkoenig@gmail.com",
-					},
-					Date: "2017-11-27T04:31:18Z",
+	dummyrevisions := []*api.WikiCommit{
+		{
+			ID: "2c54faec6c45d31c1abfaecdab471eac6633738a",
+			Author: &api.CommitUser{
+				Identity: api.Identity{
+					Name:  "Ethan Koenig",
+					Email: "ethantkoenig@gmail.com",
 				},
-				Committer: &api.CommitUser{
-					Identity: api.Identity{
-						Name:  "Ethan Koenig",
-						Email: "ethantkoenig@gmail.com",
-					},
-					Date: "2017-11-27T04:31:18Z",
-				},
-				Message: "Add Home.md\n",
+				Date: "2017-11-27T04:31:18Z",
 			},
+			Committer: &api.CommitUser{
+				Identity: api.Identity{
+					Name:  "Ethan Koenig",
+					Email: "ethantkoenig@gmail.com",
+				},
+				Date: "2017-11-27T04:31:18Z",
+			},
+			Message: "Add Home.md\n",
 		},
-		Count: 1,
 	}
 
 	assert.Equal(t, dummyrevisions, revisions)
