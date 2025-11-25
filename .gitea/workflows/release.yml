@@ -261,3 +261,198 @@ EOF
           echo "- \`gitea-${{ needs.generate-version.outputs.version }}-linux-amd64.tar.gz\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "💡 所有产物包含 SHA256 校验文件" >> $GITHUB_STEP_SUMMARY
+
+  # Job 5: 创建 Release
+  create-release:
+    name: Create Release
+    needs: [generate-version, build-backend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: 整理产物文件
+        run: |
+          echo "📦 整理产物文件..."
+          mkdir -p release-files
+
+          # 将所有产物移动到 release-files 目录
+          find artifacts/ -name "*.tar.gz" -exec mv {} release-files/ \;
+          find artifacts/ -name "*.sha256" -exec mv {} release-files/ \;
+
+          echo "✅ 产物文件列表:"
+          ls -lh release-files/
+
+      - name: 生成 Release Notes
+        id: release-notes
+        run: |
+          VERSION="${{ needs.generate-version.outputs.version }}"
+
+          # 读取 SHA256 校验和
+          cd release-files
+
+          cat > ../release-notes.md << EOF
+          ## 🎉 Kysion Gitea ${VERSION}
+
+          基于 Gitea v1.25.2 的定制版本，包含 Kysion 特定优化和功能。
+
+          ### 📦 支持平台
+
+          - 🍎 **macOS ARM64** (darwin-arm64) - Apple Silicon (M1/M2/M3)
+          - 🍎 **macOS x86_64** (darwin-amd64) - Intel Mac
+          - 🐧 **Linux ARM64** (linux-arm64) - ARM64 服务器
+          - 🐧 **Linux x86_64** (linux-amd64) - x86_64 服务器
+
+          ### 📥 下载说明
+
+          请根据您的平台选择相应的压缩包下载。每个压缩包包含：
+          - \`gitea\` - 可执行文件
+          - \`start.sh\` - 启动脚本
+          - \`custom/\` - 自定义配置
+          - \`templates/\` - 模板文件
+          - \`public/\` - 静态资源
+          - \`options/\` - 选项文件
+          - \`LICENSE\` - 许可证
+          - \`README.md\` - 说明文档
+
+          ### 🔐 SHA256 校验和
+
+          \`\`\`
+          $(cat *.sha256)
+          \`\`\`
+
+          ### 🚀 快速开始
+
+          1. 下载对应平台的压缩包
+          2. 验证 SHA256 校验和
+          3. 解压: \`tar xzf gitea-${VERSION}-{platform}.tar.gz\`
+          4. 进入目录: \`cd gitea-${VERSION}-{platform}\`
+          5. 启动: \`./start.sh\`
+
+          ### 📖 详细文档
+
+          更多信息请参考 [BUILD_GUIDE.md](../BUILD_GUIDE.md)
+
+          ---
+
+          **构建信息**
+          - 版本号: ${VERSION}
+          - 构建日期: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          - Go 版本: 1.23
+          - 编译标签: sqlite sqlite_unlock_notify
+
+          **技术特性**
+          - 静态链接 (CGO_ENABLED=0)
+          - 交叉编译支持
+          - 完整资源内嵌
+
+          EOF
+
+          cd ..
+
+          echo "✅ Release Notes 生成完成"
+          cat release-notes.md
+
+      - name: 创建 Git Tag
+        run: |
+          VERSION="${{ needs.generate-version.outputs.version }}"
+
+          echo "🏷️ 创建 Git Tag: ${VERSION}"
+
+          git config user.name "Gitea Actions"
+          git config user.email "actions@gitea.local"
+
+          # 检查 tag 是否已存在
+          if git rev-parse "${VERSION}" >/dev/null 2>&1; then
+            echo "⚠️ Tag ${VERSION} 已存在，跳过创建"
+          else
+            git tag -a "${VERSION}" -m "Release ${VERSION}"
+            git push origin "${VERSION}"
+            echo "✅ Tag ${VERSION} 创建成功"
+          fi
+
+      - name: 创建 Gitea Release
+        env:
+          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.generate-version.outputs.version }}
+        run: |
+          echo "🚀 创建 Gitea Release: ${VERSION}"
+
+          # 从仓库 URL 提取信息
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+          API_URL="${{ github.api_url }}/repos/${{ github.repository }}/releases"
+
+          echo "API URL: ${API_URL}"
+
+          # 读取 Release Notes
+          RELEASE_BODY=$(cat release-notes.md)
+
+          # 创建 Release
+          curl -X POST "${API_URL}" \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d @- << EOF
+          {
+            "tag_name": "${VERSION}",
+            "name": "Release ${VERSION}",
+            "body": $(echo "${RELEASE_BODY}" | jq -Rs .),
+            "draft": false,
+            "prerelease": false
+          }
+          EOF
+
+          echo "✅ Release 创建成功"
+
+      - name: 上传 Release 产物
+        env:
+          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.generate-version.outputs.version }}
+        run: |
+          echo "📤 上传 Release 产物..."
+
+          API_URL="${{ github.api_url }}/repos/${{ github.repository }}/releases"
+
+          # 获取 Release ID
+          RELEASE_ID=$(curl -s "${API_URL}/tags/${VERSION}" \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            | jq -r '.id')
+
+          echo "Release ID: ${RELEASE_ID}"
+
+          # 上传所有产物
+          cd release-files
+          for file in *; do
+            echo "📤 上传文件: ${file}"
+
+            curl -X POST \
+              "${API_URL}/${RELEASE_ID}/assets?name=${file}" \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary "@${file}"
+
+            echo "✅ ${file} 上传完成"
+          done
+
+          echo "🎉 所有产物上传完成！"
+
+      - name: Release 摘要
+        run: |
+          echo "## 🎉 Release 发布完成" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**版本**: \`${{ needs.generate-version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Release 链接**: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.generate-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**包含产物**:" >> $GITHUB_STEP_SUMMARY
+          echo "- gitea-${{ needs.generate-version.outputs.version }}-darwin-arm64.tar.gz" >> $GITHUB_STEP_SUMMARY
+          echo "- gitea-${{ needs.generate-version.outputs.version }}-darwin-amd64.tar.gz" >> $GITHUB_STEP_SUMMARY
+          echo "- gitea-${{ needs.generate-version.outputs.version }}-linux-arm64.tar.gz" >> $GITHUB_STEP_SUMMARY
+          echo "- gitea-${{ needs.generate-version.outputs.version }}-linux-amd64.tar.gz" >> $GITHUB_STEP_SUMMARY
+          echo "- 以及对应的 SHA256 校验文件" >> $GITHUB_STEP_SUMMARY
