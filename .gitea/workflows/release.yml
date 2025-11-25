@@ -472,3 +472,205 @@ jobs:
           echo "- gitea-${{ needs.generate-version.outputs.version }}-linux-arm64.tar.gz" >> $GITHUB_STEP_SUMMARY
           echo "- gitea-${{ needs.generate-version.outputs.version }}-linux-amd64.tar.gz" >> $GITHUB_STEP_SUMMARY
           echo "- 以及对应的 SHA256 校验文件" >> $GITHUB_STEP_SUMMARY
+
+  # Job 6: 自动部署到生产服务器
+  deploy:
+    name: Deploy to Production
+    needs: [generate-version, create-release]
+    runs-on: ubuntu-latest
+    # 仅在 main 分支且 Release 创建成功后部署
+    if: github.ref == 'refs/heads/main'
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+      GITEA_DATA_DIR: /data/gitea
+      GITEA_BACKUP_DIR: /data/gitea-backups
+      VERSION: ${{ needs.generate-version.outputs.version }}
+    steps:
+      - name: 检查部署配置
+        run: |
+          echo "🔍 检查部署配置..."
+
+          if [ -z "${DEPLOY_HOST}" ] || [ -z "${DEPLOY_USER}" ] || [ -z "${DEPLOY_PASSWORD}" ]; then
+            echo "⚠️ 部署配置不完整，跳过自动部署"
+            echo "请在仓库 Secrets 中配置以下变量:"
+            echo "  - DEPLOY_HOST: 生产服务器地址"
+            echo "  - DEPLOY_USER: SSH 用户名"
+            echo "  - DEPLOY_PASSWORD: SSH 密码"
+            exit 0
+          fi
+
+          echo "✅ 部署配置检查通过"
+          echo "   目标服务器: ${DEPLOY_HOST}"
+          echo "   部署版本: ${VERSION}"
+
+      - name: 安装 SSH 客户端
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: 备份生产数据
+        run: |
+          echo "📦 开始备份生产服务器数据..."
+
+          BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+          BACKUP_NAME="gitea-backup-${BACKUP_DATE}"
+
+          sshpass -p "${DEPLOY_PASSWORD}" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << ENDSSH
+            set -e
+
+            echo "🔍 检查 Gitea 服务状态..."
+
+            # 创建备份目录
+            mkdir -p ${GITEA_BACKUP_DIR}
+
+            echo "📦 备份数据库..."
+            if [ -f "${GITEA_DATA_DIR}/gitea.db" ]; then
+              cp "${GITEA_DATA_DIR}/gitea.db" "${GITEA_BACKUP_DIR}/${BACKUP_NAME}-gitea.db"
+              echo "✅ 数据库备份完成"
+            fi
+
+            echo "📦 备份配置文件..."
+            if [ -d "${GITEA_DATA_DIR}/conf" ]; then
+              tar czf "${GITEA_BACKUP_DIR}/${BACKUP_NAME}-conf.tar.gz" -C "${GITEA_DATA_DIR}" conf/
+              echo "✅ 配置文件备份完成"
+            fi
+
+            echo "📦 备份自定义文件..."
+            if [ -d "${GITEA_DATA_DIR}/custom" ]; then
+              tar czf "${GITEA_BACKUP_DIR}/${BACKUP_NAME}-custom.tar.gz" -C "${GITEA_DATA_DIR}" custom/
+              echo "✅ 自定义文件备份完成"
+            fi
+
+            echo "📦 备份仓库数据..."
+            if [ -d "${GITEA_DATA_DIR}/gitea-repositories" ]; then
+              tar czf "${GITEA_BACKUP_DIR}/${BACKUP_NAME}-repos.tar.gz" -C "${GITEA_DATA_DIR}" gitea-repositories/
+              echo "✅ 仓库数据备份完成"
+            fi
+
+            # 清理超过 7 天的旧备份
+            echo "🧹 清理旧备份文件..."
+            find ${GITEA_BACKUP_DIR} -name "gitea-backup-*" -mtime +7 -delete 2>/dev/null || true
+
+            echo "📋 当前备份列表:"
+            ls -lh ${GITEA_BACKUP_DIR}/ | head -20
+
+            echo "✅ 备份完成: ${BACKUP_NAME}"
+          ENDSSH
+
+          echo "✅ 生产服务器数据备份成功"
+
+      - name: 下载并部署新版本
+        run: |
+          echo "🚀 开始部署新版本: ${VERSION}"
+
+          # 确定目标平台（生产服务器通常是 linux-amd64）
+          PLATFORM="linux-amd64"
+          PACKAGE_NAME="gitea-${VERSION}-${PLATFORM}"
+          DOWNLOAD_URL="${{ github.server_url }}/${{ github.repository }}/releases/download/${VERSION}/${PACKAGE_NAME}.tar.gz"
+
+          sshpass -p "${DEPLOY_PASSWORD}" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << ENDSSH
+            set -e
+
+            echo "📥 下载新版本..."
+            cd /tmp
+            rm -rf gitea-deploy-*
+            mkdir -p gitea-deploy-${VERSION}
+            cd gitea-deploy-${VERSION}
+
+            # 下载发布包
+            wget -q "${DOWNLOAD_URL}" -O ${PACKAGE_NAME}.tar.gz || curl -sLO "${DOWNLOAD_URL}"
+
+            # 验证下载
+            if [ ! -f "${PACKAGE_NAME}.tar.gz" ]; then
+              echo "❌ 下载失败: ${DOWNLOAD_URL}"
+              exit 1
+            fi
+
+            echo "✅ 下载完成"
+            ls -lh ${PACKAGE_NAME}.tar.gz
+
+            echo "📦 解压发布包..."
+            tar xzf ${PACKAGE_NAME}.tar.gz
+
+            echo "🛑 停止 Gitea 服务..."
+            systemctl stop gitea 2>/dev/null || service gitea stop 2>/dev/null || true
+
+            # 等待服务完全停止
+            sleep 5
+
+            echo "📋 备份当前二进制..."
+            if [ -f "/usr/local/bin/gitea" ]; then
+              cp /usr/local/bin/gitea /usr/local/bin/gitea.bak
+            fi
+
+            echo "📦 部署新版本..."
+            cp ${PACKAGE_NAME}/gitea /usr/local/bin/gitea
+            chmod +x /usr/local/bin/gitea
+
+            echo "🔍 验证新版本..."
+            /usr/local/bin/gitea --version
+
+            echo "🚀 启动 Gitea 服务..."
+            systemctl start gitea 2>/dev/null || service gitea start 2>/dev/null || true
+
+            # 等待服务启动
+            sleep 10
+
+            echo "🔍 检查服务状态..."
+            systemctl status gitea --no-pager 2>/dev/null || service gitea status 2>/dev/null || true
+
+            # 清理临时文件
+            echo "🧹 清理临时文件..."
+            cd /tmp
+            rm -rf gitea-deploy-${VERSION}
+
+            echo "✅ 部署完成: ${VERSION}"
+          ENDSSH
+
+          echo "✅ 新版本部署成功"
+
+      - name: 验证部署
+        run: |
+          echo "🔍 验证部署结果..."
+
+          sleep 5
+
+          sshpass -p "${DEPLOY_PASSWORD}" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << ENDSSH
+            echo "📋 Gitea 版本信息:"
+            /usr/local/bin/gitea --version
+
+            echo ""
+            echo "📋 服务状态:"
+            systemctl status gitea --no-pager 2>/dev/null || service gitea status 2>/dev/null || echo "服务状态检查需要手动确认"
+
+            echo ""
+            echo "📋 进程信息:"
+            ps aux | grep gitea | grep -v grep || true
+
+            echo ""
+            echo "📋 端口监听:"
+            netstat -tlnp 2>/dev/null | grep gitea || ss -tlnp 2>/dev/null | grep gitea || true
+          ENDSSH
+
+          echo "✅ 部署验证完成"
+
+      - name: 部署摘要
+        run: |
+          echo "## 🚀 自动部署完成" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**版本**: \`${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**目标服务器**: \`${DEPLOY_HOST}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 部署步骤" >> $GITHUB_STEP_SUMMARY
+          echo "1. ✅ 检查部署配置" >> $GITHUB_STEP_SUMMARY
+          echo "2. ✅ 备份生产数据（数据库、配置、仓库）" >> $GITHUB_STEP_SUMMARY
+          echo "3. ✅ 下载新版本发布包" >> $GITHUB_STEP_SUMMARY
+          echo "4. ✅ 停止服务并更新二进制" >> $GITHUB_STEP_SUMMARY
+          echo "5. ✅ 启动服务并验证" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 备份位置" >> $GITHUB_STEP_SUMMARY
+          echo "\`${GITEA_BACKUP_DIR}/\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **注意**: 如需回滚，备份文件保留 7 天" >> $GITHUB_STEP_SUMMARY
