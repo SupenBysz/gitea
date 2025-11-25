@@ -578,18 +578,13 @@ jobs:
           # 获取 Release 信息
           RELEASE_INFO=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" "${API_URL}")
 
-          # 提取 Release ID 和 Asset ID（使用 API 端点下载，而不是 browser_download_url）
-          # 注意：browser_download_url 指向 /attachments/{uuid}，对于 internal 仓库需要 session cookie
-          # 而 API 端点 /releases/{release_id}/assets/{attachment_id} 支持 token 认证
+          # 从 Release 信息中提取 browser_download_url（指向 /attachments/{uuid}）
+          # Gitea API /releases/{id}/assets/{id} 只返回 JSON 元数据，不返回二进制文件
+          # 需要使用 browser_download_url 下载实际文件，并添加 token 认证
           # 同一个 Release 可能有多次构建产生的同名资源，需要获取最新的（ID 最大的）
-          RELEASE_ID=$(echo "${RELEASE_INFO}" | jq -r '.id')
-          ASSET_ID=$(echo "${RELEASE_INFO}" | jq -r "[.assets[] | select(.name == \"${PACKAGE_NAME}.tar.gz\")] | sort_by(.id) | last | .id")
-
-          if [ -z "${RELEASE_ID}" ] || [ "${RELEASE_ID}" = "null" ]; then
-            echo "❌ 无法获取 Release ID"
-            echo "${RELEASE_INFO}" | jq '.' 2>/dev/null || echo "${RELEASE_INFO}"
-            exit 1
-          fi
+          ASSET_INFO=$(echo "${RELEASE_INFO}" | jq -r "[.assets[] | select(.name == \"${PACKAGE_NAME}.tar.gz\")] | sort_by(.id) | last")
+          ASSET_ID=$(echo "${ASSET_INFO}" | jq -r '.id')
+          DOWNLOAD_URL=$(echo "${ASSET_INFO}" | jq -r '.browser_download_url')
 
           if [ -z "${ASSET_ID}" ] || [ "${ASSET_ID}" = "null" ]; then
             echo "❌ 无法获取 Asset ID，Release 资源可能不存在"
@@ -599,16 +594,20 @@ jobs:
             exit 1
           fi
 
-          # 使用正确的 Gitea API 端点格式下载（需要 release_id 和 attachment_id）
-          # API 格式: /repos/{owner}/{repo}/releases/{release_id}/assets/{attachment_id}
-          DOWNLOAD_URL="${{ github.api_url }}/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets/${ASSET_ID}"
-          echo "✅ 找到 Release ID: ${RELEASE_ID}, Asset ID: ${ASSET_ID}"
+          if [ -z "${DOWNLOAD_URL}" ] || [ "${DOWNLOAD_URL}" = "null" ]; then
+            echo "❌ 无法获取下载 URL"
+            echo "${ASSET_INFO}" | jq '.' 2>/dev/null || echo "${ASSET_INFO}"
+            exit 1
+          fi
+
+          echo "✅ 找到 Asset ID: ${ASSET_ID}"
           echo "📥 下载发布包到 Runner..."
           echo "下载 URL: ${DOWNLOAD_URL}"
           mkdir -p /tmp/gitea-deploy
 
-          # 使用 API 端点下载，添加 Accept: application/octet-stream 获取二进制文件
-          curl -sL -H "Authorization: token ${GITEA_TOKEN}" -H "Accept: application/octet-stream" "${DOWNLOAD_URL}" -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
+          # 使用 browser_download_url 下载，添加 token 认证头
+          # Gitea 的 /attachments/{uuid} 端点支持 token 认证
+          curl -sL -H "Authorization: token ${GITEA_TOKEN}" "${DOWNLOAD_URL}" -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
 
           # 验证下载
           if [ ! -f "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" ]; then
