@@ -115,9 +115,14 @@ jobs:
           go generate -tags "${TAGS}" ./...
           echo "✅ bindata 生成完成"
           # 验证 bindata 文件已生成
+          echo "📁 检查 public bindata:"
           ls -la modules/public/bindata.* 2>/dev/null || echo "public bindata files not found"
+          echo "📁 检查 options bindata:"
           ls -la modules/options/bindata.* 2>/dev/null || echo "options bindata files not found"
+          echo "📁 检查 templates bindata:"
           ls -la modules/templates/bindata.* 2>/dev/null || echo "templates bindata files not found"
+          echo "📁 检查 migration bindata:"
+          ls -la modules/migration/bindata.* 2>/dev/null || echo "migration bindata files not found"
 
       - name: 上传前端构建产物（包含 bindata）
         uses: actions/upload-artifact@v3
@@ -128,6 +133,7 @@ jobs:
             modules/public/bindata.*
             modules/options/bindata.*
             modules/templates/bindata.*
+            modules/migration/bindata.*
           retention-days: 1
 
   # Job 3: 构建后端（多平台 matrix）
@@ -174,9 +180,14 @@ jobs:
         run: |
           echo "🔍 验证 bindata 文件..."
           ls -la public/assets/ | head -10
+          echo "📁 检查 public bindata:"
           ls -la modules/public/bindata.* 2>/dev/null || echo "⚠️ public bindata 未找到"
+          echo "📁 检查 options bindata:"
           ls -la modules/options/bindata.* 2>/dev/null || echo "⚠️ options bindata 未找到"
+          echo "📁 检查 templates bindata:"
           ls -la modules/templates/bindata.* 2>/dev/null || echo "⚠️ templates bindata 未找到"
+          echo "📁 检查 migration bindata:"
+          ls -la modules/migration/bindata.* 2>/dev/null || echo "⚠️ migration bindata 未找到"
 
       - name: 编译后端 (${{ matrix.os }}-${{ matrix.arch }})
         env:
