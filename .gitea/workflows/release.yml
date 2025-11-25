@@ -578,40 +578,26 @@ jobs:
           # 获取 Release 信息
           RELEASE_INFO=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" "${API_URL}")
 
-          # 提取 Release ID 和 Asset ID
-          RELEASE_ID=$(echo "${RELEASE_INFO}" | jq -r ".id")
-          ASSET_ID=$(echo "${RELEASE_INFO}" | jq -r ".assets[] | select(.name == \"${PACKAGE_NAME}.tar.gz\") | .id" | tail -1)
+          # 提取 browser_download_url（Gitea attachments URL，可公开访问）
+          # Gitea 的 API 端点返回 JSON 元数据，实际文件需要通过 browser_download_url 下载
+          DOWNLOAD_URL=$(echo "${RELEASE_INFO}" | jq -r ".assets[] | select(.name == \"${PACKAGE_NAME}.tar.gz\") | .browser_download_url" | tail -1)
 
-          if [ -z "${RELEASE_ID}" ] || [ "${RELEASE_ID}" = "null" ]; then
-            echo "❌ 无法获取 Release ID"
-            echo "${RELEASE_INFO}" | head -50
+          if [ -z "${DOWNLOAD_URL}" ] || [ "${DOWNLOAD_URL}" = "null" ]; then
+            echo "❌ 无法获取下载 URL，Release 资源可能不存在"
+            echo "正在查找的文件: ${PACKAGE_NAME}.tar.gz"
+            echo "可用的 Assets:"
+            echo "${RELEASE_INFO}" | jq '.assets[] | {name: .name, url: .browser_download_url}' 2>/dev/null || echo "${RELEASE_INFO}"
             exit 1
           fi
 
-          if [ -z "${ASSET_ID}" ] || [ "${ASSET_ID}" = "null" ]; then
-            echo "❌ 无法获取 Asset ID，Release 资源可能不存在"
-            echo "Release Info:"
-            echo "${RELEASE_INFO}" | jq '.assets[].name' 2>/dev/null || echo "${RELEASE_INFO}"
-            exit 1
-          fi
+          echo "✅ 找到下载链接: ${DOWNLOAD_URL}"
 
-          echo "✅ Release ID: ${RELEASE_ID}"
-          echo "✅ Asset ID: ${ASSET_ID}"
-
-          # 构建 API 下载 URL（使用 Gitea API 端点下载）
-          # Gitea API: GET /repos/{owner}/{repo}/releases/{release_id}/assets/{asset_id}
-          DOWNLOAD_URL="${{ github.api_url }}/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets/${ASSET_ID}"
-          echo "📥 API 下载 URL: ${DOWNLOAD_URL}"
-
-          # 在 Runner 上下载（使用 API 端点 + token 认证）
+          # 在 Runner 上下载（使用 browser_download_url，这是 attachments URL，无需认证）
           echo "📥 下载发布包到 Runner..."
           mkdir -p /tmp/gitea-deploy
 
-          # 使用 -L 跟随重定向，-J -O 保存原始文件名，或直接指定输出文件
-          curl -sL -H "Authorization: token ${GITEA_TOKEN}" \
-               -H "Accept: application/octet-stream" \
-               "${DOWNLOAD_URL}" \
-               -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
+          # Gitea 的 attachments URL 是公开的，直接下载
+          curl -sL "${DOWNLOAD_URL}" -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
 
           # 验证下载
           if [ ! -f "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" ]; then
