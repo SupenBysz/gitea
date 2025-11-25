@@ -602,14 +602,20 @@ jobs:
 
           echo "✅ 找到 Asset ID: ${ASSET_ID}"
           echo "📥 下载发布包到 Runner..."
-          echo "下载 URL: ${DOWNLOAD_URL}"
           mkdir -p /tmp/gitea-deploy
 
-          # 使用 browser_download_url 下载
-          # 对于内部仓库，Gitea 的 /attachments/{uuid} 端点需要使用 ?token= 查询参数认证
-          # Authorization header 在某些 Gitea 版本中对 attachments 端点不生效
-          DOWNLOAD_URL_WITH_TOKEN="${DOWNLOAD_URL}?token=${GITEA_TOKEN}"
-          curl -sL "${DOWNLOAD_URL_WITH_TOKEN}" -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
+          # 使用 Gitea 官方 API 端点下载 release asset
+          # GET /api/v1/repos/{owner}/{repo}/releases/assets/{id}
+          # 需要添加 Accept: application/octet-stream 头部来获取二进制内容
+          # 这个端点支持 Authorization header 认证，适用于内部仓库
+          ASSET_API_URL="${{ github.api_url }}/repos/${{ github.repository }}/releases/assets/${ASSET_ID}"
+          echo "下载 API URL: ${ASSET_API_URL}"
+
+          curl -sL \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -H "Accept: application/octet-stream" \
+            "${ASSET_API_URL}" \
+            -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
 
           # 验证下载
           if [ ! -f "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" ]; then
