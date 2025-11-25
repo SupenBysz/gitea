@@ -593,12 +593,13 @@ jobs:
 
           echo "✅ 找到下载链接: ${DOWNLOAD_URL}"
 
-          # 在 Runner 上下载（使用 browser_download_url，这是 attachments URL，无需认证）
+          # 在 Runner 上下载（使用 browser_download_url）
+          # 注意：对于 internal 仓库，attachments URL 也需要认证
           echo "📥 下载发布包到 Runner..."
           mkdir -p /tmp/gitea-deploy
 
-          # Gitea 的 attachments URL 是公开的，直接下载
-          curl -sL "${DOWNLOAD_URL}" -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
+          # 添加认证头下载文件（internal 仓库需要认证）
+          curl -sL -H "Authorization: token ${GITEA_TOKEN}" "${DOWNLOAD_URL}" -o /tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz
 
           # 验证下载
           if [ ! -f "/tmp/gitea-deploy/${PACKAGE_NAME}.tar.gz" ]; then
