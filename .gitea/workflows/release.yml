@@ -592,10 +592,10 @@ jobs:
 
           echo "✅ 找到 Asset UUID: ${ASSET_UUID}"
 
-          # Gitea 附件存储路径格式: /data/gitea/data/attachments/{uuid[0:2]}/{uuid}
+          # Gitea 附件存储路径格式: /data/gitea/data/attachments/{uuid[0]}/{uuid}
           # 例如 UUID "5e311272-b913-4640-bad3-8956683f1c90" 存储在:
-          # /data/gitea/data/attachments/5e/5e311272-b913-4640-bad3-8956683f1c90
-          UUID_PREFIX=$(echo "${ASSET_UUID}" | cut -c1-2)
+          # /data/gitea/data/attachments/5/5e311272-b913-4640-bad3-8956683f1c90
+          UUID_PREFIX=$(echo "${ASSET_UUID}" | cut -c1)
           GITEA_DATA_DIR="/data/gitea/data"
           ATTACHMENT_PATH="${GITEA_DATA_DIR}/attachments/${UUID_PREFIX}/${ASSET_UUID}"
 
