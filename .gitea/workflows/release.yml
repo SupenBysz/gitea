@@ -33,26 +33,50 @@ jobs:
         env:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
+          set -x  # 启用调试输出
+
           if [ -n "${{ inputs.version_override }}" ]; then
             # 使用手动指定的版本号
             VERSION="${{ inputs.version_override }}"
           else
             # 从 VERSION 文件读取基础版本
+            if [ ! -f VERSION ]; then
+              echo "❌ VERSION 文件不存在"
+              exit 1
+            fi
             BASE_VERSION=$(cat VERSION | tr -d '\n')
+            echo "📋 基础版本: ${BASE_VERSION}"
+
             # 生成日期（MMDD格式，如 1125 表示 11月25日）
             DATE=$(date +%m%d)
+            echo "📅 日期: ${DATE}"
 
             # 查询当天已有的 release 数量，计算递增序号
             # 获取所有 releases 并筛选当天的版本
             GITEA_URL="${GITHUB_SERVER_URL}"
             REPO="${GITHUB_REPOSITORY}"
 
-            # 查询已有的 releases
-            RELEASES=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" \
-              "${GITEA_URL}/api/v1/repos/${REPO}/releases?limit=100" 2>/dev/null || echo "[]")
+            echo "📡 Gitea URL: ${GITEA_URL}"
+            echo "📁 仓库: ${REPO}"
+
+            # 查询已有的 releases（使用 GITHUB_TOKEN 作为备选）
+            TOKEN="${GITEA_TOKEN:-${{ secrets.GITHUB_TOKEN }}}"
+
+            if [ -n "${TOKEN}" ]; then
+              RELEASES=$(curl -s -H "Authorization: token ${TOKEN}" \
+                "${GITEA_URL}/api/v1/repos/${REPO}/releases?limit=100" 2>/dev/null || echo "[]")
+            else
+              echo "⚠️ 没有配置 Token，使用匿名请求"
+              RELEASES=$(curl -s "${GITEA_URL}/api/v1/repos/${REPO}/releases?limit=100" 2>/dev/null || echo "[]")
+            fi
 
             # 统计当天已有的发布数量（匹配 .MMDD序号- 格式）
             TODAY_COUNT=$(echo "$RELEASES" | grep -o "\"tag_name\":\"v[^\"]*\.${DATE}[0-9]*-Kysion\"" | wc -l | tr -d ' ')
+
+            # 确保 TODAY_COUNT 是有效数字
+            if ! [ "${TODAY_COUNT}" -eq "${TODAY_COUNT}" ] 2>/dev/null; then
+              TODAY_COUNT=0
+            fi
 
             # 序号 = 当天发布数量 + 1
             SEQ=$((TODAY_COUNT + 1))
