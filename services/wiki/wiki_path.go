@@ -148,6 +148,26 @@ func WebPathToGitPathWithDashMarker(s WebPath) string {
 	return strings.Join(a, "/") + ".md"
 }
 
+// WebPathToGitPathPreserveDashes converts WebPath to git path, preserving URL dashes and adding .- marker
+// This handles the case where URL dashes represent actual dashes in the filename (not spaces)
+// For example: URL "Architecture-Design" -> git path "Architecture-Design.-.md"
+func WebPathToGitPathPreserveDashes(s WebPath) string {
+	if strings.HasSuffix(string(s), ".md") {
+		ret, _ := url.PathUnescape(string(s))
+		return util.PathJoinRelX(ret)
+	}
+
+	a := strings.Split(string(s), "/")
+	for i := range a {
+		// Only URL unescape, don't convert dashes to spaces
+		if hasDashMarker(a[i]) {
+			a[i] = removeDashMarker(a[i])
+		}
+		a[i], _ = url.QueryUnescape(a[i])
+	}
+	return strings.Join(a, "/") + ".-.md"
+}
+
 func GitPathToWebPath(s string) (wp WebPath, err error) {
 	if !strings.HasSuffix(s, ".md") {
 		return "", repo_model.ErrWikiInvalidFileName{FileName: s}

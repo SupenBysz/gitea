@@ -181,6 +181,21 @@ func wikiEntryByName(ctx *context.Context, commit *git.Commit, wikiName wiki_ser
 		}
 	}
 	if entry == nil {
+		// Try preserving URL dashes with dash marker (e.g., "Architecture-Design" -> "Architecture-Design.-.md")
+		// This handles clean URLs where dashes in URL represent actual dashes in the filename
+		gitFilenamePreserveDashes := wiki_service.WebPathToGitPathPreserveDashes(wikiName)
+		if gitFilenamePreserveDashes != gitFilename {
+			entry, err = findEntryForFile(commit, gitFilenamePreserveDashes)
+			if err != nil && !git.IsErrNotExist(err) {
+				ctx.ServerError("findEntryForFile", err)
+				return nil, "", false, false
+			}
+			if entry != nil {
+				return entry, gitFilenamePreserveDashes, false, false
+			}
+		}
+	}
+	if entry == nil {
 		// check if the file without ".md" suffix exists
 		gitFilename := strings.TrimSuffix(gitFilename, ".md")
 		entry, err = findEntryForFile(commit, gitFilename)
