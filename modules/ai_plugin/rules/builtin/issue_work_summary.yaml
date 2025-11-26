@@ -1,0 +1,70 @@
+# Rule: Issue Work Summary Required
+# P0 Priority - Core compliance rule
+# Ensures that issues have a work summary before being closed
+
+name: issue_work_summary_required
+description: |
+  工单关闭前必须有工作总结。
+  当工单被关闭时，检查是否有以 "## 工作总结" 或 "## Work Summary" 开头的评论。
+  如果没有，则阻止关闭并提醒用户添加工作总结。
+
+enabled: true
+priority: 10
+
+trigger:
+  event_types:
+    - issues
+  actions:
+    - closed
+
+conditions_operator: and
+
+conditions:
+  # Check that no work summary comment exists
+  - field: comment_exists
+    operator: not_matches
+    value: "(?i)(##\\s*(工作总结|work\\s*summary))"
+    params:
+      check_all_comments: true
+
+actions:
+  # Block the close action
+  - type: block
+    params:
+      message: |
+        ⚠️ **工单关闭被阻止**
+
+        根据团队规范，关闭工单前需要添加工作总结。
+
+        请在评论中添加以下格式的工作总结后再关闭：
+
+        ```markdown
+        ## 工作总结
+
+        ### 完成内容
+        - [描述完成的主要工作]
+
+        ### 解决方案
+        - [描述采用的技术方案]
+
+        ### 测试验证
+        - [描述测试方法和结果]
+
+        ### 遗留问题（如有）
+        - [列出未解决的问题]
+        ```
+
+  # Notify the issue author
+  - type: notify
+    params:
+      channel: telegram
+      template: work_summary_required
+      recipients:
+        - "{{.Event.Payload.issue.user.login}}"
+
+  # Add a label to indicate missing summary
+  - type: label
+    params:
+      add:
+        - "needs-work-summary"
+      remove: []

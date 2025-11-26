@@ -1,0 +1,86 @@
+# Rule: PR Submitter Must Be Acceptor
+# P0 Priority - Core compliance rule
+# Ensures that the PR submitter is the designated acceptor of the linked issue
+
+name: pr_submitter_is_acceptor
+description: |
+  PR提交者必须是工单验收者。
+  当PR被创建或更新时，检查PR提交者是否与关联工单的验收者（assignee）一致。
+  这确保了工单的验收者对代码变更负责。
+
+enabled: true
+priority: 10
+
+trigger:
+  event_types:
+    - pull_request
+  actions:
+    - opened
+    - synchronize
+    - edited
+
+conditions_operator: and
+
+conditions:
+  # Check that PR has linked issues
+  - field: pr_has_linked_issue
+    operator: equals
+    value: true
+
+  # Check that PR submitter is NOT the acceptor of linked issue
+  - field: pr_submitter_is_issue_assignee
+    operator: equals
+    value: false
+
+actions:
+  # Warn about the mismatch
+  - type: warn
+    params:
+      message: |
+        ⚠️ **验收者不匹配警告**
+
+        检测到 PR 提交者与关联工单的验收者不一致：
+
+        - **PR 提交者**: {{.Event.Payload.pull_request.user.login}}
+        - **工单验收者**: {{.LinkedIssue.Assignee.Login}}
+        - **关联工单**: #{{.LinkedIssue.Number}}
+
+        根据团队规范，PR 应由工单验收者提交，以确保验收者对代码变更负责。
+
+        **建议操作**：
+        1. 将工单验收者修改为当前 PR 提交者
+        2. 或由工单验收者重新提交此 PR
+
+  # Add comment to PR
+  - type: comment
+    params:
+      body: |
+        ### 🔔 合规检查提醒
+
+        此 PR 的提交者与关联工单的验收者不一致。
+
+        | 项目 | 用户 |
+        |------|------|
+        | PR 提交者 | @{{.Event.Payload.pull_request.user.login}} |
+        | 工单验收者 | @{{.LinkedIssue.Assignee.Login}} |
+
+        请确认是否需要调整工单验收者或由正确的人员提交 PR。
+
+        ---
+        _此消息由 AI 协同工作规范插件自动生成_
+
+  # Notify via Telegram
+  - type: notify
+    params:
+      channel: telegram
+      template: pr_acceptor_mismatch
+      recipients:
+        - "{{.Event.Payload.pull_request.user.login}}"
+        - "{{.LinkedIssue.Assignee.Login}}"
+
+  # Add label
+  - type: label
+    params:
+      add:
+        - "acceptor-mismatch"
+      remove: []
