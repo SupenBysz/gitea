@@ -33,8 +33,6 @@ jobs:
         env:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
-          set -x  # 启用调试输出
-
           if [ -n "${{ inputs.version_override }}" ]; then
             # 使用手动指定的版本号
             VERSION="${{ inputs.version_override }}"
@@ -52,26 +50,31 @@ jobs:
             echo "📅 日期: ${DATE}"
 
             # 查询当天已有的 release 数量，计算递增序号
-            # 获取所有 releases 并筛选当天的版本
             GITEA_URL="${GITHUB_SERVER_URL}"
             REPO="${GITHUB_REPOSITORY}"
 
             echo "📡 Gitea URL: ${GITEA_URL}"
             echo "📁 仓库: ${REPO}"
 
-            # 查询已有的 releases（使用 GITHUB_TOKEN 作为备选）
+            # 查询已有的 releases（只获取 tag_name 字段以减少数据量）
             TOKEN="${GITEA_TOKEN:-${{ secrets.GITHUB_TOKEN }}}"
 
+            # 使用临时文件存储 API 响应，避免大 JSON 导致 shell 问题
+            TEMP_FILE=$(mktemp)
+
             if [ -n "${TOKEN}" ]; then
-              RELEASES=$(curl -s -H "Authorization: token ${TOKEN}" \
-                "${GITEA_URL}/api/v1/repos/${REPO}/releases?limit=100" 2>/dev/null || echo "[]")
+              curl -s -H "Authorization: token ${TOKEN}" \
+                "${GITEA_URL}/api/v1/repos/${REPO}/releases?limit=50" > "${TEMP_FILE}" 2>/dev/null || echo "[]" > "${TEMP_FILE}"
             else
               echo "⚠️ 没有配置 Token，使用匿名请求"
-              RELEASES=$(curl -s "${GITEA_URL}/api/v1/repos/${REPO}/releases?limit=100" 2>/dev/null || echo "[]")
+              curl -s "${GITEA_URL}/api/v1/repos/${REPO}/releases?limit=50" > "${TEMP_FILE}" 2>/dev/null || echo "[]" > "${TEMP_FILE}"
             fi
 
-            # 统计当天已有的发布数量（匹配 .MMDD序号- 格式）
-            TODAY_COUNT=$(echo "$RELEASES" | grep -o "\"tag_name\":\"v[^\"]*\.${DATE}[0-9]*-Kysion\"" | wc -l | tr -d ' ')
+            # 使用 grep 从文件中提取当天的发布数量
+            TODAY_COUNT=$(grep -o "\"tag_name\":\"v[^\"]*\.${DATE}[0-9]*-Kysion\"" "${TEMP_FILE}" | wc -l | tr -d ' ' || echo "0")
+
+            # 清理临时文件
+            rm -f "${TEMP_FILE}"
 
             # 确保 TODAY_COUNT 是有效数字
             if ! [ "${TODAY_COUNT}" -eq "${TODAY_COUNT}" ] 2>/dev/null; then
