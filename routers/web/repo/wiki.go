@@ -167,6 +167,20 @@ func wikiEntryByName(ctx *context.Context, commit *git.Commit, wikiName wiki_ser
 		}
 	}
 	if entry == nil {
+		// Try with dash marker as fallback for clean URLs accessing files created with dash marker
+		gitFilenameWithDash := wiki_service.WebPathToGitPathWithDashMarker(wikiName)
+		if gitFilenameWithDash != gitFilename {
+			entry, err = findEntryForFile(commit, gitFilenameWithDash)
+			if err != nil && !git.IsErrNotExist(err) {
+				ctx.ServerError("findEntryForFile", err)
+				return nil, "", false, false
+			}
+			if entry != nil {
+				return entry, gitFilenameWithDash, false, false
+			}
+		}
+	}
+	if entry == nil {
 		// check if the file without ".md" suffix exists
 		gitFilename := strings.TrimSuffix(gitFilename, ".md")
 		entry, err = findEntryForFile(commit, gitFilename)
@@ -225,7 +239,7 @@ func renderViewPage(ctx *context.Context) (*git.Repository, *git.TreeEntry) {
 		_, displayName := wiki_service.WebPathToUserTitle(wikiName)
 		pages = append(pages, PageMeta{
 			Name:         displayName,
-			SubURL:       wiki_service.WebPathToURLPath(wikiName),
+			SubURL:       wiki_service.WebPathToCleanURLPath(wikiName),
 			GitEntryName: entry.Name(),
 		})
 	}
@@ -605,7 +619,7 @@ func WikiPages(ctx *context.Context) {
 		_, displayName := wiki_service.WebPathToUserTitle(wikiName)
 		pages = append(pages, PageMeta{
 			Name:         displayName,
-			SubURL:       wiki_service.WebPathToURLPath(wikiName),
+			SubURL:       wiki_service.WebPathToCleanURLPath(wikiName),
 			GitEntryName: entry.Entry.Name(),
 			UpdatedUnix:  timeutil.TimeStamp(entry.Commit.Author.When.Unix()),
 		})

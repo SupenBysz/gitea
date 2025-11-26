@@ -129,6 +129,25 @@ func WebPathToGitPathWithoutDashMarker(s WebPath) string {
 	return strings.Join(a, "/") + ".md"
 }
 
+// WebPathToGitPathWithDashMarker converts WebPath to git path, always adding .- marker
+// This is useful for looking up files that were created with dash marker when URL doesn't have it
+func WebPathToGitPathWithDashMarker(s WebPath) string {
+	if strings.HasSuffix(string(s), ".md") {
+		ret, _ := url.PathUnescape(string(s))
+		return util.PathJoinRelX(ret)
+	}
+
+	a := strings.Split(string(s), "/")
+	for i := range a {
+		a[i], _ = unescapeSegment(a[i])
+		// Always add dash marker
+		a[i] = escapeSegToWeb(a[i], true)
+		a[i] = strings.ReplaceAll(a[i], "%20", " ")
+		a[i] = strings.ReplaceAll(a[i], "+", " ")
+	}
+	return strings.Join(a, "/") + ".md"
+}
+
 func GitPathToWebPath(s string) (wp WebPath, err error) {
 	if !strings.HasSuffix(s, ".md") {
 		return "", repo_model.ErrWikiInvalidFileName{FileName: s}
@@ -158,6 +177,18 @@ func WebPathToUserTitle(s WebPath) (dir, display string) {
 
 func WebPathToURLPath(s WebPath) string {
 	return string(s)
+}
+
+// WebPathToCleanURLPath converts WebPath to a clean URL path without dash marker
+// This is used for generating user-friendly URLs in page lists
+func WebPathToCleanURLPath(s WebPath) string {
+	a := strings.Split(string(s), "/")
+	for i := range a {
+		if hasDashMarker(a[i]) {
+			a[i] = removeDashMarker(a[i])
+		}
+	}
+	return strings.Join(a, "/")
 }
 
 func WebPathFromRequest(s string) WebPath {
