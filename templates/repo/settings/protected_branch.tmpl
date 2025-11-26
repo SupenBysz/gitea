@@ -334,6 +334,19 @@
 						<p class="help">{{ctx.Locale.Tr "repo.settings.block_admin_merge_override_desc"}}</p>
 					</div>
 				</div>
+
+				<h5 class="ui dividing header">{{ctx.Locale.Tr "repo.settings.protect_allowed_merge_sources"}}</h5>
+				<div class="field">
+					<label>{{ctx.Locale.Tr "repo.settings.protect_allowed_merge_sources_exact"}}</label>
+					<input name="allowed_merge_sources" type="text" value="{{.Rule.AllowedMergeSources}}">
+					<p class="help tw-ml-0">{{ctx.Locale.Tr "repo.settings.protect_allowed_merge_sources_exact_desc"}}</p>
+				</div>
+				<div class="field">
+					<label>{{ctx.Locale.Tr "repo.settings.protect_allowed_merge_sources_patterns"}}</label>
+					<input name="allowed_merge_source_patterns" type="text" value="{{.Rule.AllowedMergeSourcePatterns}}">
+					<p class="help tw-ml-0">{{ctx.Locale.Tr "repo.settings.protect_allowed_merge_sources_patterns_desc" "https://github.com/gobwas/glob"}}</p>
+				</div>
+
 				<div class="divider"></div>
 
 				<div class="field">

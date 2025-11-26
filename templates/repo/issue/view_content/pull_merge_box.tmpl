@@ -17,6 +17,7 @@
 	{{- else if .IsBlockedByRejection}}red
 	{{- else if .IsBlockedByOfficialReviewRequests}}red
 	{{- else if .IsBlockedByOutdatedBranch}}red
+	{{- else if .IsBlockedByDisallowedSourceBranch}}red
 	{{- else if .IsBlockedByChangedProtectedFiles}}red
 	{{- else if and .EnableStatusCheck (or .RequiredStatusCheckState.IsFailure .RequiredStatusCheckState.IsError)}}red
 	{{- else if and .EnableStatusCheck (or (not $.LatestCommitStatus) .RequiredStatusCheckState.IsPending .RequiredStatusCheckState.IsWarning)}}yellow
@@ -136,6 +137,11 @@
 						{{svg "octicon-x"}}
 						{{ctx.Locale.Tr "repo.pulls.blocked_by_outdated_branch"}}
 					</div>
+				{{else if .IsBlockedByDisallowedSourceBranch}}
+					<div class="item">
+						{{svg "octicon-x"}}
+						{{ctx.Locale.Tr "repo.pulls.blocked_by_disallowed_source_branch" .Issue.PullRequest.HeadBranch .Issue.PullRequest.BaseBranch}}
+					</div>
 				{{else if .IsBlockedByChangedProtectedFiles}}
 					<div class="item">
 						{{svg "octicon-x"}}
@@ -169,8 +175,11 @@
 
 				{{$notAllOverridableChecksOk := or .IsBlockedByApprovals .IsBlockedByRejection .IsBlockedByOfficialReviewRequests .IsBlockedByOutdatedBranch .IsBlockedByChangedProtectedFiles (and .EnableStatusCheck (not .RequiredStatusCheckState.IsSuccess))}}
 
+				{{/* Source branch restriction is NOT overridable by admin */}}
+				{{$hasNonOverridableBlock := .IsBlockedByDisallowedSourceBranch}}
+
 				{{/* admin can merge without checks, writer can merge when checks succeed */}}
-				{{$canMergeNow := and (or (and (not $.ProtectedBranch.BlockAdminMergeOverride) $.IsRepoAdmin) (not $notAllOverridableChecksOk)) (or (not .AllowMerge) (not .RequireSigned) .WillSign)}}
+				{{$canMergeNow := and (not $hasNonOverridableBlock) (or (and (not $.ProtectedBranch.BlockAdminMergeOverride) $.IsRepoAdmin) (not $notAllOverridableChecksOk)) (or (not .AllowMerge) (not .RequireSigned) .WillSign)}}
 				{{/* admin and writer both can make an auto merge schedule */}}
 
 				{{if $canMergeNow}}
@@ -341,6 +350,11 @@
 					<div class="item text red">
 						{{svg "octicon-x"}}
 						{{ctx.Locale.Tr "repo.pulls.blocked_by_outdated_branch"}}
+					</div>
+				{{else if .IsBlockedByDisallowedSourceBranch}}
+					<div class="item text red">
+						{{svg "octicon-x"}}
+						{{ctx.Locale.Tr "repo.pulls.blocked_by_disallowed_source_branch" .Issue.PullRequest.HeadBranch .Issue.PullRequest.BaseBranch}}
 					</div>
 				{{else if .IsBlockedByChangedProtectedFiles}}
 					<div class="item text red">

@@ -580,6 +580,11 @@ func CheckPullBranchProtections(ctx context.Context, pr *issues_model.PullReques
 		return nil
 	}
 
+	// Check if the source branch is allowed to merge into this protected branch
+	if !pb.IsMergeSourceAllowed(pr.HeadBranch) {
+		return util.ErrorWrap(ErrNotReadyToMerge, "Source branch '%s' is not allowed to merge into protected branch '%s'", pr.HeadBranch, pr.BaseBranch)
+	}
+
 	isPass, err := IsPullCommitStatusPass(ctx, pr)
 	if err != nil {
 		return err

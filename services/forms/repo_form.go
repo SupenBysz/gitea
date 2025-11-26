@@ -196,6 +196,8 @@ type ProtectBranchForm struct {
 	ProtectedFilePatterns         string
 	UnprotectedFilePatterns       string
 	BlockAdminMergeOverride       bool
+	AllowedMergeSources           string
+	AllowedMergeSourcePatterns    string
 }
 
 // Validate validates the fields

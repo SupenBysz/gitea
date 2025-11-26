@@ -64,6 +64,11 @@ type ProtectedBranch struct {
 	UnprotectedFilePatterns       string   `xorm:"TEXT"`
 	BlockAdminMergeOverride       bool     `xorm:"NOT NULL DEFAULT false"`
 
+	// AllowedMergeSources contains exact branch names allowed to merge into this protected branch
+	AllowedMergeSources string `xorm:"TEXT"`
+	// AllowedMergeSourcePatterns contains glob patterns for branches allowed to merge into this protected branch
+	AllowedMergeSourcePatterns string `xorm:"TEXT"`
+
 	CreatedUnix timeutil.TimeStamp `xorm:"created"`
 	UpdatedUnix timeutil.TimeStamp `xorm:"updated"`
 }
@@ -309,6 +314,89 @@ func (protectBranch *ProtectedBranch) IsUnprotectedFile(patterns []glob.Glob, pa
 	}
 
 	return r
+}
+
+// HasMergeSourceRestriction returns true if the protected branch has merge source restrictions configured
+func (protectBranch *ProtectedBranch) HasMergeSourceRestriction() bool {
+	return strings.TrimSpace(protectBranch.AllowedMergeSources) != "" ||
+		strings.TrimSpace(protectBranch.AllowedMergeSourcePatterns) != ""
+}
+
+// IsMergeSourceAllowed checks if the given source branch is allowed to merge into this protected branch
+// Returns true if:
+// 1. No merge source restrictions are configured (AllowedMergeSources and AllowedMergeSourcePatterns are both empty)
+// 2. The source branch matches one of the exact names in AllowedMergeSources (semicolon separated)
+// 3. The source branch matches one of the glob patterns in AllowedMergeSourcePatterns (semicolon separated)
+func (protectBranch *ProtectedBranch) IsMergeSourceAllowed(sourceBranch string) bool {
+	// If no restrictions are configured, all sources are allowed
+	if !protectBranch.HasMergeSourceRestriction() {
+		return true
+	}
+
+	sourceBranch = strings.TrimSpace(sourceBranch)
+	if sourceBranch == "" {
+		return false
+	}
+
+	// Check exact match in AllowedMergeSources (semicolon separated)
+	if protectBranch.AllowedMergeSources != "" {
+		for source := range strings.SplitSeq(protectBranch.AllowedMergeSources, ";") {
+			source = strings.TrimSpace(source)
+			if source != "" && strings.EqualFold(source, sourceBranch) {
+				return true
+			}
+		}
+	}
+
+	// Check pattern match in AllowedMergeSourcePatterns (semicolon separated)
+	if protectBranch.AllowedMergeSourcePatterns != "" {
+		for pattern := range strings.SplitSeq(protectBranch.AllowedMergeSourcePatterns, ";") {
+			pattern = strings.TrimSpace(pattern)
+			if pattern == "" {
+				continue
+			}
+			g, err := glob.Compile(pattern, '/')
+			if err != nil {
+				log.Warn("Invalid glob pattern for AllowedMergeSourcePatterns[%d]: %s %v", protectBranch.ID, pattern, err)
+				continue
+			}
+			if g.Match(sourceBranch) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// GetAllowedMergeSourcesList returns a slice of allowed merge source branch names
+func (protectBranch *ProtectedBranch) GetAllowedMergeSourcesList() []string {
+	if protectBranch.AllowedMergeSources == "" {
+		return nil
+	}
+	result := make([]string, 0)
+	for source := range strings.SplitSeq(protectBranch.AllowedMergeSources, ";") {
+		source = strings.TrimSpace(source)
+		if source != "" {
+			result = append(result, source)
+		}
+	}
+	return result
+}
+
+// GetAllowedMergeSourcePatternsList returns a slice of allowed merge source patterns
+func (protectBranch *ProtectedBranch) GetAllowedMergeSourcePatternsList() []string {
+	if protectBranch.AllowedMergeSourcePatterns == "" {
+		return nil
+	}
+	result := make([]string, 0)
+	for pattern := range strings.SplitSeq(protectBranch.AllowedMergeSourcePatterns, ";") {
+		pattern = strings.TrimSpace(pattern)
+		if pattern != "" {
+			result = append(result, pattern)
+		}
+	}
+	return result
 }
 
 // GetProtectedBranchRuleByName getting protected branch rule by name

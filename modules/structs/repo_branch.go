@@ -65,6 +65,10 @@ type BranchProtection struct {
 	ProtectedFilePatterns         string   `json:"protected_file_patterns"`
 	UnprotectedFilePatterns       string   `json:"unprotected_file_patterns"`
 	BlockAdminMergeOverride       bool     `json:"block_admin_merge_override"`
+	// AllowedMergeSources is a semicolon-separated list of exact branch names allowed to merge into this protected branch
+	AllowedMergeSources string `json:"allowed_merge_sources"`
+	// AllowedMergeSourcePatterns is a semicolon-separated list of glob patterns for branches allowed to merge
+	AllowedMergeSourcePatterns string `json:"allowed_merge_source_patterns"`
 	// swagger:strfmt date-time
 	Created time.Time `json:"created_at"`
 	// swagger:strfmt date-time
@@ -105,6 +109,10 @@ type CreateBranchProtectionOption struct {
 	ProtectedFilePatterns         string   `json:"protected_file_patterns"`
 	UnprotectedFilePatterns       string   `json:"unprotected_file_patterns"`
 	BlockAdminMergeOverride       bool     `json:"block_admin_merge_override"`
+	// AllowedMergeSources is a semicolon-separated list of exact branch names allowed to merge into this protected branch
+	AllowedMergeSources string `json:"allowed_merge_sources"`
+	// AllowedMergeSourcePatterns is a semicolon-separated list of glob patterns for branches allowed to merge
+	AllowedMergeSourcePatterns string `json:"allowed_merge_source_patterns"`
 }
 
 // EditBranchProtectionOption options for editing a branch protection
@@ -138,6 +146,10 @@ type EditBranchProtectionOption struct {
 	ProtectedFilePatterns         *string  `json:"protected_file_patterns"`
 	UnprotectedFilePatterns       *string  `json:"unprotected_file_patterns"`
 	BlockAdminMergeOverride       *bool    `json:"block_admin_merge_override"`
+	// AllowedMergeSources is a semicolon-separated list of exact branch names allowed to merge into this protected branch
+	AllowedMergeSources *string `json:"allowed_merge_sources"`
+	// AllowedMergeSourcePatterns is a semicolon-separated list of glob patterns for branches allowed to merge
+	AllowedMergeSourcePatterns *string `json:"allowed_merge_source_patterns"`
 }
 
 // UpdateBranchProtectionPriories a list to update the branch protection rule priorities
