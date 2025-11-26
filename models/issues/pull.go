@@ -822,6 +822,11 @@ func MergeBlockedByOutdatedBranch(protectBranch *git_model.ProtectedBranch, pr *
 	return protectBranch.BlockOnOutdatedBranch && pr.CommitsBehind > 0
 }
 
+// MergeBlockedByDisallowedSourceBranch returns true if merge is blocked because the source branch is not allowed
+func MergeBlockedByDisallowedSourceBranch(protectBranch *git_model.ProtectedBranch, pr *PullRequest) bool {
+	return !protectBranch.IsMergeSourceAllowed(pr.HeadBranch)
+}
+
 // GetCodeOwnersFromContent returns the code owners configuration
 // Return empty slice if files missing
 // Return warning messages on parsing errors
