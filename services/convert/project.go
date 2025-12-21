@@ -31,7 +31,11 @@ func ToProject(ctx context.Context, p *project_model.Project) *api.Project {
 		NumClosedIssues: p.NumClosedIssues,
 		NumIssues:       p.NumIssues,
 		Created:         p.CreatedUnix.AsTime(),
-		Updated:         p.UpdatedUnix.AsTime(),
+	}
+
+	if p.UpdatedUnix > 0 {
+		t := p.UpdatedUnix.AsTime()
+		project.Updated = &t
 	}
 
 	if p.ClosedDateUnix > 0 {
@@ -59,7 +63,7 @@ func ToProjectColumn(ctx context.Context, column *project_model.Column) *api.Pro
 		return nil
 	}
 
-	return &api.ProjectColumn{
+	c := &api.ProjectColumn{
 		ID:        column.ID,
 		Title:     column.Title,
 		Default:   column.Default,
@@ -69,8 +73,14 @@ func ToProjectColumn(ctx context.Context, column *project_model.Column) *api.Pro
 		CreatorID: column.CreatorID,
 		NumIssues: column.NumIssues,
 		Created:   column.CreatedUnix.AsTime(),
-		Updated:   column.UpdatedUnix.AsTime(),
 	}
+
+	if column.UpdatedUnix > 0 {
+		t := column.UpdatedUnix.AsTime()
+		c.Updated = &t
+	}
+
+	return c
 }
 
 // ToProjectList converts a list of project_model.Project to a list of api.Project

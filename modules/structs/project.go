@@ -39,9 +39,9 @@ type Project struct {
 	// Created time
 	// swagger:strfmt date-time
 	Created time.Time `json:"created"`
-	// Updated time
+	// Updated time (nil if never updated)
 	// swagger:strfmt date-time
-	Updated time.Time `json:"updated"`
+	Updated *time.Time `json:"updated,omitempty"`
 	// Closed time
 	// swagger:strfmt date-time
 	ClosedDate *time.Time `json:"closed_date,omitempty"`
@@ -97,9 +97,9 @@ type ProjectColumn struct {
 	// Created time
 	// swagger:strfmt date-time
 	Created time.Time `json:"created"`
-	// Updated time
+	// Updated time (nil if never updated)
 	// swagger:strfmt date-time
-	Updated time.Time `json:"updated"`
+	Updated *time.Time `json:"updated,omitempty"`
 }
 
 // CreateProjectColumnOption represents options for creating a project column

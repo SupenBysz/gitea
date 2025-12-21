@@ -27834,10 +27834,11 @@
           "x-go-name": "Type"
         },
         "updated": {
-          "description": "Updated time",
+          "description": "Updated time (nil if never updated)",
           "type": "string",
           "format": "date-time",
-          "x-go-name": "Updated"
+          "x-go-name": "Updated",
+          "x-nullable": true
         },
         "url": {
           "description": "Project URL",
@@ -27903,10 +27904,11 @@
           "x-go-name": "Title"
         },
         "updated": {
-          "description": "Updated time",
+          "description": "Updated time (nil if never updated)",
           "type": "string",
           "format": "date-time",
-          "x-go-name": "Updated"
+          "x-go-name": "Updated",
+          "x-nullable": true
         }
       },
       "x-go-package": "code.gitea.io/gitea/modules/structs"
